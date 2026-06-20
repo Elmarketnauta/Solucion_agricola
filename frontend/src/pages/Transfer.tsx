@@ -8,7 +8,7 @@ import PinModal from '../components/PinModal';
 export default function Transfer() {
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const { formatAmount } = useFormatter();
+  const { formatAmount, formatPhone } = useFormatter();
   const [step, setStep] = useState(1);
   const [phone, setPhone] = useState('');
   const [recipient, setRecipient] = useState<{businessName: string; ownerName: string} | null>(null);
@@ -149,7 +149,7 @@ export default function Transfer() {
           <div className="result-icon result-icon-success">✅</div>
           <h2>¡Envío exitoso!</h2>
           <div className="result-amount">S/ {formatAmount(result.amount)}</div>
-          <p className="result-detail">Enviado a {result.receiverPhone}</p>
+          <p className="result-detail">Enviado a {recipient?.businessName || formatPhone(result.receiverPhone)}</p>
           <p className="result-detail mt-md">Nuevo saldo: S/ {formatAmount(result.newBalance)}</p>
           <button className="btn btn-primary btn-lg mt-xl" onClick={() => navigate('/dashboard')}>Volver al inicio</button>
         </div>
