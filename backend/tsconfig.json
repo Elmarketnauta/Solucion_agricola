@@ -1,8 +1,10 @@
 {
+  "exclude": ["prisma.config.ts"],
   "compilerOptions": {
     "target": "es2022",
     "module": "commonjs",
-    "moduleResolution": "node",
+    "moduleResolution": "node10",
+    "ignoreDeprecations": "6.0",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
