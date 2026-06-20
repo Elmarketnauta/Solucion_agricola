@@ -1,0 +1,107 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model MerchantProfile {
+  id           Int      @id @default(autoincrement())
+  uuid         String   @unique @default(uuid())
+  businessName String
+  ownerName    String
+  ruc          String?  // 11 digits
+  dni          String?  // 8 digits
+  phoneNumber  String   @unique
+  email        String?  @unique
+  pin          String?  // bcrypt hash of 4-digit PIN
+  status       String   @default("Active") // Active, Suspended, KYC_Pending
+  saasTier     String   @default("Free") // Free, Pro
+  mdrRate      Float    @default(0.00)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  wallet       Wallet?
+  products     Product[]
+  creditLine   CreditLine?
+  transactionsAsSender   Transaction[] @relation("SenderTransactions")
+  transactionsAsReceiver Transaction[] @relation("ReceiverTransactions")
+}
+
+model Wallet {
+  id         Int      @id @default(autoincrement())
+  merchantId Int      @unique
+  balance    Float    @default(0.00)
+  currency   String   @default("PEN")
+  updatedAt  DateTime @updatedAt
+
+  merchant   MerchantProfile @relation(fields: [merchantId], references: [id])
+}
+
+model Transaction {
+  id                  Int      @id @default(autoincrement())
+  txSignature         String   @unique
+  senderPhone         String?
+  receiverPhone       String?
+  amount              Float
+  fee                 Float    @default(0.00)
+  type                String   // P2P, P2B, CICO_Deposit, CICO_Withdrawal, Loan_Disbursement, Loan_Repayment
+  interoperableSource String   // Yape, Plin, BCP, BBVA, Interbank, Yunta_Internal
+  status              String   @default("Initiated") // Initiated, Pending_Settlement, Settled, Failed
+  createdAt           DateTime @default(now())
+  settledAt           DateTime?
+
+  senderMerchant   MerchantProfile? @relation("SenderTransactions", fields: [senderPhone], references: [phoneNumber])
+  receiverMerchant MerchantProfile? @relation("ReceiverTransactions", fields: [receiverPhone], references: [phoneNumber])
+
+  @@index([senderPhone])
+  @@index([receiverPhone])
+}
+
+model Product {
+  id            Int      @id @default(autoincrement())
+  merchantId    Int
+  name          String
+  price         Float
+  stockQuantity Int      @default(0)
+  sku           String?
+
+  merchant      MerchantProfile @relation(fields: [merchantId], references: [id])
+  sales         SalesLedger[]
+}
+
+model SalesLedger {
+  id         Int      @id @default(autoincrement())
+  productId  Int
+  quantity   Int
+  totalAmount Float
+  recordedAt DateTime @default(now())
+
+  product    Product  @relation(fields: [productId], references: [id])
+}
+
+model CreditLine {
+  id                      Int      @id @default(autoincrement())
+  merchantId              Int      @unique
+  creditLimit             Float    @default(0.00)
+  utilizedAmount          Float    @default(0.00)
+  interestRateEffective   Float    // TEA
+  alternativeScore        Int      @default(0) // 0-1000
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  merchant                MerchantProfile   @relation(fields: [merchantId], references: [id])
+  installments            LoanInstallment[]
+}
+
+model LoanInstallment {
+  id           Int        @id @default(autoincrement())
+  creditLineId Int
+  amount       Float
+  dueDate      DateTime
+  status       String     @default("Unpaid") // Unpaid, Paid, Overdue
+
+  creditLine   CreditLine @relation(fields: [creditLineId], references: [id])
+}

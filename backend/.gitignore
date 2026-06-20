@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+/generated/prisma
+prisma/*.db
+prisma/*.db-journal
+pentest.js
+test_output.txt
