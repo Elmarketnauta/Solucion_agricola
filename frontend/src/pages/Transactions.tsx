@@ -7,7 +7,7 @@ type Filter = 'all' | 'in' | 'out';
 export default function Transactions() {
   const { user } = useAuth();
   const { transactions, loading, page, totalPages, loadMore } = useTransactions(20);
-  const { formatAmount, formatDate, formatTime } = useFormatter();
+  const { formatAmount, formatDate, formatTime, formatPhone } = useFormatter();
   const [filter, setFilter] = useState<Filter>('all');
 
   const filtered = transactions.filter(tx => {
@@ -67,7 +67,9 @@ export default function Transactions() {
                   </div>
                   <div className="tx-details">
                     <div className="tx-title">
-                      {isIn ? `Cobro de ${tx.senderPhone || tx.interoperableSource}` : `Envío a ${tx.receiverPhone}`}
+                      {isIn
+                        ? `Cobro de ${tx.senderName || formatPhone(tx.senderPhone) || tx.interoperableSource || '—'}`
+                        : `Envío a ${tx.receiverName || formatPhone(tx.receiverPhone) || '—'}`}
                     </div>
                     <div className="tx-subtitle">{dateStr} · {timeStr}</div>
                   </div>

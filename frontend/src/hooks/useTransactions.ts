@@ -5,6 +5,8 @@ export interface Transaction {
   id: number;
   senderPhone: string | null;
   receiverPhone: string | null;
+  senderName: string | null;
+  receiverName: string | null;
   amount: number;
   type: string;
   interoperableSource: string;
