@@ -16,8 +16,13 @@ const app = express();
 // SECURITY & MIDDLEWARE
 // ═══════════════════════════════════════
 app.use(helmet({
-  contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
+  contentSecurityPolicy: process.env.NODE_ENV === 'production'
+    ? { directives: { defaultSrc: ["'none'"] } }  // REST API — never serves resources
+    : false,
   hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  referrerPolicy: { policy: 'no-referrer' },
+  frameguard: { action: 'deny' },
+  crossOriginEmbedderPolicy: false,  // SPA accesses this API cross-origin with credentials
 }));
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
