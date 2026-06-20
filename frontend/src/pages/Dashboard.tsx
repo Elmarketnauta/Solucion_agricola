@@ -109,7 +109,10 @@ export default function Dashboard() {
             onClick={() => alert('QR — Próximamente')}
             aria-label="Cobrar con QR"
           >
-            ⬡ Cobrar
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="none" style={{marginRight:'6px',verticalAlign:'middle'}}>
+              <path d="M7 1L13 4.5V9.5L7 13L1 9.5V4.5Z" stroke="currentColor" strokeWidth="1.4"/>
+            </svg>
+            Cobrar
           </button>
         </div>
       </div>
