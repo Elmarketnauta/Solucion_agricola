@@ -8,7 +8,7 @@ import { z } from 'zod';
 import prisma from './db';
 import { InteroperabilityService } from './services/interoperability.service';
 import { LedgerService } from './services/ledger.service';
-import { authMiddleware, signToken, AuthRequest } from './middleware/auth';
+import { authMiddleware, signToken, extractToken, tryRevokeToken, AuthRequest } from './middleware/auth';
 
 const app = express();
 
@@ -277,7 +277,9 @@ app.post('/api/transfer/validate', authMiddleware, validateLimiter, async (req: 
   }
 });
 
-app.post('/api/auth/logout', (_req, res) => {
+app.post('/api/auth/logout', (req, res) => {
+  const token = extractToken(req);
+  if (token) tryRevokeToken(token);
   res.clearCookie(SESSION_COOKIE, { path: '/' });
   res.json({ success: true });
 });
