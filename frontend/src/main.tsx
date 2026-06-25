@@ -1,3 +1,8 @@
+// ============================================================================
+// Yunta — Frontend (React + Vite). Punto de entrada de la PWA.
+// Developed by Marketnauta
+// ============================================================================
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';

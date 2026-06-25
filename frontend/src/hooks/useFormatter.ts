@@ -1,3 +1,4 @@
+// Developed by Marketnauta
 export function useFormatter() {
   const formatAmount = (amount: number, locale = 'es-PE'): string => {
     return amount.toLocaleString(locale, {

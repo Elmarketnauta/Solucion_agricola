@@ -1,3 +1,4 @@
+// Developed by Marketnauta
 import { useNavigate } from 'react-router-dom';
 
 export default function FX() {

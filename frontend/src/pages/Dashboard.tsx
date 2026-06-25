@@ -1,3 +1,4 @@
+// Developed by Marketnauta
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useDashboardData, useFormatter } from '../hooks';
@@ -228,10 +229,34 @@ export default function Dashboard() {
             <div className="service-title">Comercios</div>
           </button>
 
-          {/* More */}
+          {/* Yunta-Agro — Score agrícola */}
           <button
             className="service-card"
             style={{ '--i': 5 } as React.CSSProperties}
+            onClick={() => navigate('/agro')}
+            aria-label="Ver mi score agrícola Yunta-Agro"
+          >
+            <div className="service-icon-wrapper service-icon-bg-green">🌱</div>
+            <div className="service-title">Score<br/>Agro</div>
+            <span className="service-badge" style={{ background: '#3DD68C' }}>AGRO</span>
+          </button>
+
+          {/* Centro Agronómico — telemetría IoT, oráculo, seguros, EUDR */}
+          <button
+            className="service-card"
+            style={{ '--i': 6 } as React.CSSProperties}
+            onClick={() => navigate('/agro/center')}
+            aria-label="Abrir el Centro Agronómico AgTech"
+          >
+            <div className="service-icon-wrapper service-icon-bg-green">📡</div>
+            <div className="service-title">Centro<br/>Agronómico</div>
+            <span className="service-badge" style={{ background: '#0F7A5A' }}>IoT</span>
+          </button>
+
+          {/* More */}
+          <button
+            className="service-card"
+            style={{ '--i': 7 } as React.CSSProperties}
             onClick={() => alert('Más Servicios — Próximamente')}
             aria-label="Ver más servicios próximamente"
           >

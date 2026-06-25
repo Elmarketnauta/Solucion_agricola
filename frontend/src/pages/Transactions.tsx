@@ -1,3 +1,4 @@
+// Developed by Marketnauta
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTransactions, useFormatter } from '../hooks';

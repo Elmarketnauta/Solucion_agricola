@@ -1,3 +1,8 @@
+// ============================================================================
+// Yunta — Router principal de la aplicación.
+// Developed by Marketnauta
+// ============================================================================
+
 import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
@@ -16,6 +21,8 @@ const FX = lazy(() => import('./pages/FX'));
 const Insurance = lazy(() => import('./pages/Insurance'));
 const Investments = lazy(() => import('./pages/Investments'));
 const Merchants = lazy(() => import('./pages/Merchants'));
+const AgroScore = lazy(() => import('./pages/AgroScore'));
+const AgroCenter = lazy(() => import('./pages/AgroCenter'));
 
 function LoadingFallback() {
   return (
@@ -46,6 +53,8 @@ function App() {
         <Route path="/insurance" element={<ProtectedRoute><Layout><Insurance /></Layout></ProtectedRoute>} />
         <Route path="/investments" element={<ProtectedRoute><Layout><Investments /></Layout></ProtectedRoute>} />
         <Route path="/merchants" element={<ProtectedRoute><Layout><Merchants /></Layout></ProtectedRoute>} />
+        <Route path="/agro" element={<ProtectedRoute><Layout><AgroScore /></Layout></ProtectedRoute>} />
+        <Route path="/agro/center" element={<ProtectedRoute><Layout><AgroCenter /></Layout></ProtectedRoute>} />
 
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

@@ -1,3 +1,4 @@
+// Developed by Marketnauta
 import { useState, useCallback } from 'react';
 
 interface PinModalProps {

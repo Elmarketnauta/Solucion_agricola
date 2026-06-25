@@ -1,3 +1,4 @@
+// Developed by Marketnauta
 export { useDashboardData } from './useDashboardData';
 export { useBalance } from './useBalance';
 export { useTransactions } from './useTransactions';

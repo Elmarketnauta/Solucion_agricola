@@ -1495,3 +1495,169 @@ a:hover { color: var(--verde-hover); }
   animation: slide-up var(--duration-slow) var(--ease-out) both;
   animation-delay: calc(var(--i, 0) * 60ms);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   YUNTA-AGRO — Score page (uses existing design tokens)
+   ═══════════════════════════════════════════════════════════ */
+
+/* Layout utilities reused by AgroScore */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); }
+.w-full { width: 100%; }
+.text-right { text-align: right; }
+.mb-xs { margin-bottom: var(--space-xs); }
+.items-end { align-items: flex-end; }
+.justify-between { justify-content: space-between; }
+
+/* Tailwind-ish color helpers the page expects (mapped to Yunta tokens) */
+.bg-green-50 { background: var(--brote-light); }
+.border-green-200 { border-color: #A7E8C6; }
+.text-green-800 { color: #1B7A4B; }
+.bg-blue-50 { background: #EAF1FF; }
+.border-blue-200 { border-color: #B9D0FF; }
+.text-blue-800 { color: #1E4FB0; }
+.bg-orange-50 { background: var(--arcilla-light); }
+.border-orange-200 { border-color: #F3C2B0; }
+.text-orange-800 { color: #A23C1B; }
+.bg-gray-100 { background: #EEF1F0; }
+.bg-gray-200 { background: #E2E6E4; }
+.border-gray-200 { border-color: var(--border-default); }
+.text-gray-700 { color: var(--text-primary); }
+.bg-primary { background: var(--brote); }
+.text-error { color: var(--error); }
+.rounded-md { border-radius: var(--radius-md); }
+.rounded-full { border-radius: var(--radius-full); }
+.overflow-hidden { overflow: hidden; }
+.h-2 { height: 8px; }
+.h-full { height: 100%; }
+.border { border: 1px solid var(--border-default); }
+
+/* Stat boxes (credit line + TCEA hero) */
+.stat-box { background: var(--hueso); border-radius: var(--radius-md); padding: var(--space-md); }
+.stat-label { font-size: var(--fs-xs); color: var(--text-muted); margin-bottom: var(--space-xs); }
+.stat-value { font-size: var(--fs-2xl); font-weight: 700; color: var(--text-primary); }
+
+/* TCEA breakdown table */
+.cost-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.cost-table td { padding: 0.5rem 0; border-bottom: 1px solid var(--border-default); }
+.cost-table .cost-total td { border-bottom: none; border-top: 2px solid var(--text-primary); padding-top: 0.6rem; font-size: var(--fs-base); }
+
+/* Score factor bars */
+.factor-list { display: flex; flex-direction: column; gap: var(--space-md); }
+.factor-head { display: flex; justify-content: space-between; margin-bottom: var(--space-xs); }
+.factor-label { font-weight: 600; font-size: var(--fs-sm); }
+.factor-val { font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.factor-hint { margin-top: var(--space-xs); }
+
+/* Educational next-steps list */
+.steps-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-md); }
+.step-item { background: var(--hueso); border-radius: var(--radius-md); padding: var(--space-md); border-left: 3px solid var(--brote); }
+.step-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-sm); margin-bottom: var(--space-xs); }
+.step-action { font-weight: 600; font-size: var(--fs-sm); }
+.step-impact { white-space: nowrap; }
+.step-why { line-height: 1.4; }
+
+/* Onboard form */
+.form-label { display: block; font-size: var(--fs-sm); font-weight: 600; margin-bottom: var(--space-xs); }
+.form-input { width: 100%; padding: 0.75rem; border: 1px solid var(--border-default); border-radius: var(--radius-md); font-size: var(--fs-base); background: var(--bg-input); }
+.form-input:focus { outline: none; border-color: var(--border-focus); background: var(--bg-input-focus); }
+
+/* ============================================================================
+   Yunta-Agro — Centro Agronómico (AgTech). Developed by Marketnauta
+   ============================================================================ */
+
+/* Rótulo técnico monoespaciado para variables (VWC, T_air, etc.) */
+.agro-tag {
+  font-size: 0.65rem; font-weight: 700; letter-spacing: 0.03em;
+  background: var(--brote-light); color: var(--verde-yunta, #0F7A5A);
+  padding: 1px 6px; border-radius: var(--radius-sm); margin-left: 6px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* Encabezado de sección con icono + subtítulo técnico */
+.agro-section-title { display: flex; align-items: center; gap: var(--space-sm); margin: var(--space-lg) 0 var(--space-sm); }
+.agro-section-icon { font-size: 1.4rem; }
+.agro-section-name { font-size: var(--fs-base); font-weight: 700; color: var(--text-primary); }
+.agro-section-sub { font-size: var(--fs-xs); color: var(--text-muted); }
+
+/* Hero + índice de salud del cultivo (CHI) */
+.agro-hero { border-left: 4px solid var(--brote); }
+.agro-health-row { display: flex; align-items: center; gap: var(--space-md); margin-top: var(--space-md); }
+.agro-health-label { font-weight: 700; color: var(--text-primary); margin-bottom: 2px; }
+
+/* Medidor radial (gauge) del CHI */
+.agro-gauge {
+  width: 84px; height: 84px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.agro-gauge-inner {
+  width: 64px; height: 64px; border-radius: 50%; background: var(--bg-card);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.agro-gauge-value { font-size: 1.5rem; font-weight: 800; line-height: 1; color: var(--text-primary); }
+.agro-gauge-unit { font-size: 0.6rem; color: var(--text-muted); letter-spacing: 0.05em; }
+
+/* Métricas con bandas de umbral (semáforo agronómico) */
+.agro-metric-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-lg); }
+.agro-metric-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: var(--space-sm); }
+.agro-metric-label { font-weight: 600; font-size: var(--fs-sm); }
+.agro-metric-value { font-size: 1.25rem; font-weight: 800; color: var(--text-primary); }
+.agro-metric-unit { font-size: 0.7rem; font-weight: 600; color: var(--text-muted); }
+.agro-band-track { position: relative; display: flex; height: 12px; border-radius: var(--radius-full); overflow: hidden; }
+.agro-band { height: 100%; }
+.band-critical { background: #E5484D; }
+.band-warn { background: #F4B23E; }
+.band-ok { background: var(--brote); }
+.agro-band-marker {
+  position: absolute; top: -3px; width: 3px; height: 18px; background: var(--text-primary);
+  border-radius: 2px; transform: translateX(-50%); box-shadow: 0 0 0 2px var(--bg-card);
+}
+.agro-metric-hint { font-size: var(--fs-xs); color: var(--text-muted); margin-top: var(--space-xs); }
+
+/* Tira de variables secundarias / mini-stats */
+.agro-stat-strip, .agro-oracle-grid, .agro-passport-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm);
+}
+.agro-ministat { background: var(--hueso); border-radius: var(--radius-md); padding: var(--space-sm) var(--space-md); }
+.agro-ministat-top { display: flex; align-items: center; justify-content: space-between; }
+.agro-ministat-label { font-size: var(--fs-xs); color: var(--text-muted); }
+.agro-ministat-value { font-size: var(--fs-base); font-weight: 700; color: var(--text-primary); margin-top: 2px; }
+
+/* Alertas agronómicas */
+.agro-ok-banner { background: var(--brote-light); color: #0A7A3E; padding: var(--space-md); border-radius: var(--radius-md); font-size: var(--fs-sm); }
+.agro-alert-list { display: flex; flex-direction: column; gap: var(--space-sm); }
+.agro-alert-item { display: flex; gap: var(--space-sm); background: var(--hueso); border-radius: var(--radius-md); padding: var(--space-md); border-left: 3px solid var(--arcilla); }
+.agro-alert-icon { font-size: 1.3rem; }
+.agro-alert-head { display: flex; align-items: center; gap: var(--space-sm); }
+.agro-alert-title { font-weight: 700; }
+.agro-alert-msg { font-size: var(--fs-sm); margin-top: 2px; }
+.agro-alert-meta { font-size: var(--fs-xs); color: var(--text-muted); margin-top: var(--space-xs); }
+.agro-sev-badge { font-size: 0.6rem; font-weight: 800; letter-spacing: 0.05em; padding: 2px 7px; border-radius: var(--radius-full); }
+.agro-sev-critical { background: #FDE8E8; color: #C81E1E; }
+.agro-sev-warning { background: var(--warning-bg); color: #8A6115; }
+.agro-sev-info { background: var(--brote-light); color: #0A7A3E; }
+
+/* Oráculo: hash de integridad */
+.agro-hash-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); background: var(--hueso); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-md); }
+.agro-hash-label { font-size: var(--fs-xs); color: var(--text-muted); }
+.agro-hash { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: var(--fs-xs); color: var(--text-primary); }
+
+/* Seguro paramétrico: filas de trigger */
+.agro-trigger-grid { display: flex; flex-direction: column; gap: var(--space-sm); }
+.agro-trigger-row { display: flex; align-items: center; justify-content: space-between; background: var(--hueso); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-md); }
+.agro-trigger-label { font-weight: 600; font-size: var(--fs-sm); }
+.agro-trigger-param { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: var(--fs-xs); color: var(--text-muted); }
+.agro-trigger-status { font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-full); }
+.status-ok { background: var(--brote-light); color: #0A7A3E; }
+
+/* Pasaporte EUDR */
+.agro-verify-box { background: var(--hueso); border-radius: var(--radius-md); padding: var(--space-md); }
+.agro-integrity { padding: var(--space-md); border-radius: var(--radius-md); font-weight: 700; font-size: var(--fs-sm); text-align: center; }
+.integrity-ok { background: var(--brote-light); color: #0A7A3E; }
+.integrity-bad { background: #FDE8E8; color: #C81E1E; }
+
+/* Sparkline (tendencia de la serie temporal) */
+.sparkline { display: block; }
+.sparkline-empty { display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: var(--fs-xs); }
+.agro-spark-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin-top: var(--space-sm); }
+.agro-spark-stats { display: flex; gap: var(--space-sm); font-size: var(--fs-xs); color: var(--text-muted); }
+.agro-spark-stats b { color: var(--text-primary); }
