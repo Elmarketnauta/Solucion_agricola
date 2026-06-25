@@ -1,0 +1,50 @@
+# ============================================================================
+# Yunta — Infraestructura local de desarrollo
+# Developed by Marketnauta
+# ----------------------------------------------------------------------------
+# Levanta PostgreSQL para desarrollo y pruebas con UN comando:
+#     docker compose up -d
+#
+# La app se conecta vía DATABASE_URL (ver backend/.env.example).
+# Los datos persisten en el volumen `yunta_pgdata` entre reinicios.
+# ============================================================================
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: yunta-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: yunta
+      POSTGRES_PASSWORD: yunta_dev_password
+      POSTGRES_DB: yunta
+    ports:
+      - "5432:5432"
+    volumes:
+      - yunta_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # La app/migraciones esperan a que la BD acepte conexiones.
+      test: ["CMD-SHELL", "pg_isready -U yunta -d yunta"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Base de datos separada para la suite de pruebas (aislada de la de desarrollo).
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: yunta-postgres-test
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: yunta
+      POSTGRES_PASSWORD: yunta_dev_password
+      POSTGRES_DB: yunta_test
+    ports:
+      - "5433:5432"
+    # Sin volumen: la BD de pruebas es efímera a propósito.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yunta -d yunta_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  yunta_pgdata:

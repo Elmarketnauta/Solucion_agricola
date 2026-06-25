@@ -4,11 +4,17 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "cross-env DATABASE_URL=postgresql://yunta:yunta_dev_password@localhost:5433/yunta_test?schema=public NODE_ENV=test vitest run",
+    "test:watch": "cross-env DATABASE_URL=postgresql://yunta:yunta_dev_password@localhost:5433/yunta_test?schema=public NODE_ENV=test vitest",
+    "test:coverage": "cross-env DATABASE_URL=postgresql://yunta:yunta_dev_password@localhost:5433/yunta_test?schema=public NODE_ENV=test vitest run --coverage"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "comment:web3": "FASE 3 (Lnet/Web3): no instalado en el MVP fiat. Para activar, ejecutar `npm i ethers@^6.13.0` y seguir contracts/README.md. Config en src/config/lnet.config.ts y .env.web3.example.",
+  "optionalPeerForPhase3": {
+    "ethers": "^6.13.0"
+  },
   "type": "commonjs",
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -20,6 +26,7 @@
     "express-rate-limit": "^8.5.2",
     "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.3",
+    "node-cron": "^3.0.3",
     "nodemon": "^3.1.14",
     "prisma": "^5.22.0",
     "ts-node": "^10.9.2",
@@ -30,6 +37,9 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^25.9.3"
+    "@types/node": "^25.9.3",
+    "@types/node-cron": "^3.0.11",
+    "cross-env": "^7.0.3",
+    "vitest": "^2.1.9"
   }
 }

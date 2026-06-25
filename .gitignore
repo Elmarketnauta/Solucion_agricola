@@ -1,3 +1,20 @@
 .DS_Store
 Thumbs.db
 *.log
+
+# Dependencias y builds (en cualquier subdirectorio)
+node_modules/
+dist/
+dist-ssr/
+
+# Variables de entorno (nunca commitear secretos)
+.env
+.env.local
+*.env.local
+
+# Bases de datos SQLite locales (legado pre-Postgres)
+*.db
+*.db-journal
+
+# Archivos temporales de verificación
+_*.mjs

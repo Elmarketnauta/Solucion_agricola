@@ -1,5 +1,10 @@
 {
-  "exclude": ["prisma.config.ts"],
+  "exclude": [
+    "prisma.config.ts",
+    "src/services/parametricInsurance.listener.ts",
+    "test",
+    "vitest.config.ts"
+  ],
   "compilerOptions": {
     "target": "es2022",
     "module": "commonjs",

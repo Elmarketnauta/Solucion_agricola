@@ -1,5 +1,10 @@
+// ============================================================================
+// Yunta — Esquema de base de datos (Prisma)
+// Developed by Marketnauta
+// ============================================================================
+
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -26,6 +31,7 @@ model MerchantProfile {
   wallet       Wallet?
   products     Product[]
   creditLine   CreditLine?
+  producer     ProducerProfile?
   transactionsAsSender   Transaction[] @relation("SenderTransactions")
   transactionsAsReceiver Transaction[] @relation("ReceiverTransactions")
 }
@@ -104,4 +110,235 @@ model LoanInstallment {
   status       String     @default("Unpaid") // Unpaid, Paid, Overdue
 
   creditLine   CreditLine @relation(fields: [creditLineId], references: [id])
+}
+
+// ============================================================================
+// Yunta-Agro — Modelos agronómicos (fusionados desde schema.agro.prisma)
+// ============================================================================
+
+model ProducerProfile {
+  id              Int      @id @default(autoincrement())
+  merchantId      Int      @unique
+  dni             String   @unique
+  ppaVerified     Boolean  @default(false)
+  ppaCode         String?
+  hectares        Float    @default(0)
+  region          String?
+  gpsLat          Float?
+  gpsLng          Float?
+  mainCrop        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  merchant        MerchantProfile @relation(fields: [merchantId], references: [id])
+  campaigns       AgroCampaign[]
+  subsidies       SubsidyDisbursement[]
+  policies        InsurancePolicy[]
+  certifications  CertificationToken[]
+}
+
+model AgroCampaign {
+  id               Int       @id @default(autoincrement())
+  producerId       Int
+  crop             String
+  season           String
+  inputCostTotal   Float     @default(0)
+  harvestWeightKg  Float     @default(0)
+  buyerName        String?
+  salePricePerKg   Float?
+  status           String    @default("Planted") // Planted, Growing, Harvested, Sold
+  startedAt        DateTime  @default(now())
+  harvestedAt      DateTime?
+
+  producer         ProducerProfile @relation(fields: [producerId], references: [id])
+  inputs           CampaignInput[]
+  certification    CertificationToken?
+  telemetry        IoTSensorTelemetry[]
+  alerts           AgroAlert[]
+
+  @@index([producerId])
+}
+
+model CampaignInput {
+  id           Int      @id @default(autoincrement())
+  campaignId   Int
+  type         String   // Seed, Fertilizer, Labor, Pesticide
+  description  String
+  amount       Float
+  purchasedAt  DateTime @default(now())
+  paidWith     String   @default("Subsidy") // Subsidy, Credit, Own
+
+  campaign     AgroCampaign @relation(fields: [campaignId], references: [id])
+
+  @@index([campaignId])
+}
+
+model CertificationToken {
+  id              Int      @id @default(autoincrement())
+  campaignId      Int      @unique
+  producerId      Int
+  productKg       Float
+  buyerRuc        String
+  taxYear         Int
+  deductiblePct   Float    @default(0.25)
+
+  // ── "Pasaporte digital" EUDR / trazabilidad (Capa Precursora Web2) ─────────
+  // vcHash es un SHA-256 sobre el snapshot inmutable de la cosecha (GPS + PPA +
+  // campaña + producto). Imita la inmutabilidad de un token on-chain en una BD
+  // relacional: cualquier alteración de los datos certificados rompe el hash.
+  // Cuando LNET entregue accesos, este mismo hash se anclará en cadena (chainTxHash).
+  vcHash          String   @unique  // SHA-256 hex del payload certificado
+  certUuid        String   @unique @default(uuid()) // identificador público del pasaporte
+  gpsLat          Float?   // geolocalización del lote (requisito EUDR de deforestación cero)
+  gpsLng          Float?
+  region          String?
+  cropType        String?
+  ppaCode         String?  // validación del Padrón de Productores Agrarios
+  certifiedPayload String? // snapshot JSON exacto que produjo el hash (auditable)
+  chainTxHash     String?  // se rellena al anclar en LNET (Fase 3)
+  status          String   @default("Issued") // Issued, Presented_SUNAT, Validated, AnchoredOnChain
+  issuedAt        DateTime @default(now())
+
+  campaign        AgroCampaign    @relation(fields: [campaignId], references: [id])
+  producer        ProducerProfile @relation(fields: [producerId], references: [id])
+
+  @@index([producerId])
+  @@index([buyerRuc])
+  @@index([certUuid])
+}
+
+model SubsidyDisbursement {
+  id            Int      @id @default(autoincrement())
+  producerId    Int
+  program       String   // FertiBono, AgroIdeas, etc.
+  amount        Float
+  spentOnInputs Float    @default(0)
+  status        String   @default("Disbursed") // Disbursed, PartiallySpent, Reconciled
+  disbursedAt   DateTime @default(now())
+
+  producer      ProducerProfile @relation(fields: [producerId], references: [id])
+
+  @@index([producerId])
+}
+
+model InsurancePolicy {
+  id                  Int       @id @default(autoincrement())
+  producerId          Int
+  // Identificador de póliza. Hoy lo genera el backend (UUID); cuando LNET esté
+  // listo, será el id de la póliza on-chain. Mantener el nombre evita migrar IDs.
+  chainPolicyId       String    @unique
+  crop                String
+  gpsLat              Float
+  gpsLng              Float
+
+  // ── Parámetros del disparador (Capa Precursora — evaluados off-chain) ──────
+  rainThresholdMm     Float     // sequía: lluvia acumulada por debajo de este umbral
+  tempMaxThreshold    Float?    // estrés térmico / El Niño: temp. máxima anómala (°C)
+  tempMinThreshold    Float?    // heladas: temp. mínima anómala (°C)
+  stationKey          String    @default("default") // estación meteo de referencia (oráculo)
+
+  coverageAmount      Float     // indemnización en soles
+  premium             Float
+  periodStart         DateTime
+  periodEnd           DateTime
+  status              String    @default("Active") // Active, Triggered, Expired, PaidOut
+  triggeredEventType  String?   // Drought, HeatStress_ElNino, Frost
+  triggeredAt         DateTime?
+  lastEvaluatedAt     DateTime? // última vez que el motor paramétrico la revisó
+  payoutTxId          Int?      // transacción de liquidación en el ledger
+  createdAt           DateTime  @default(now())
+
+  producer            ProducerProfile @relation(fields: [producerId], references: [id])
+
+  @@index([producerId])
+  @@index([status])
+  @@index([stationKey])
+}
+
+model OfflineSignedTx {
+  id              Int      @id @default(autoincrement())
+  idempotencyKey  String   @unique
+  producerPhone   String
+  payload         String
+  signature       String
+  nonce           Int
+  expiresAt       DateTime
+  receivedVia     String   @default("Sync") // Sync, USSD, MeshBLE
+  status          String   @default("Pending") // Pending, Settled, Rejected_Expired, Rejected_Signature
+  receivedAt      DateTime @default(now())
+  settledAt       DateTime?
+
+  @@index([producerPhone])
+  @@index([status])
+}
+
+// ============================================================================
+// Yunta-Agro — Capa Precursora AgTech (Web2 / off-chain)
+// Developed by Marketnauta
+// ----------------------------------------------------------------------------
+// Modelos que simulan la descentralización (oráculo, telemetría, alertas)
+// usando solo PostgreSQL + node-cron. Diseñados para que la migración a smart
+// contracts (LNET) sea un reemplazo de implementación, no un rediseño de datos.
+// ============================================================================
+
+// ── Solución 1: Telemetría IoT / estaciones agrometeorológicas ──────────────
+// Recibe ráfagas M2M (humedad de suelo, temperatura) ligadas a una campaña.
+model IoTSensorTelemetry {
+  id              Int      @id @default(autoincrement())
+  campaignId      Int
+  deviceId        String   // identificador del nodo/sensor físico
+  soilMoisturePct Float?   // % de humedad volumétrica del suelo
+  soilTempC       Float?   // temperatura del suelo (°C)
+  airTempC        Float?   // temperatura ambiente (°C)
+  humidityPct     Float?   // humedad relativa del aire (%)
+  batteryPct      Float?   // estado del nodo (telemetría de salud)
+  recordedAt      DateTime @default(now()) // timestamp del sensor (puede venir del payload)
+  ingestedAt      DateTime @default(now()) // timestamp de ingesta en el backend
+
+  campaign        AgroCampaign @relation(fields: [campaignId], references: [id])
+
+  @@index([campaignId])
+  @@index([deviceId])
+  @@index([recordedAt])
+}
+
+// Alertas derivadas de telemetría (estrés hídrico/térmico) o del motor de seguros.
+model AgroAlert {
+  id            Int      @id @default(autoincrement())
+  campaignId    Int
+  type          String   // WaterStress, HeatStress, FrostRisk, DeviceOffline, InsurancePayout
+  severity      String   @default("Warning") // Info, Warning, Critical
+  message       String
+  metricValue   Float?   // valor que disparó la alerta (ej. humedad 11.5%)
+  threshold     Float?   // umbral cruzado
+  acknowledged  Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  campaign      AgroCampaign @relation(fields: [campaignId], references: [id])
+
+  @@index([campaignId])
+  @@index([type])
+  @@index([acknowledged])
+}
+
+// ── Solución 2: Oráculo climático centralizado (off-chain) ──────────────────
+// Caché diario de datos meteorológicos (SENAMHI/NOAA simulado). Es la "fuente de
+// verdad inmutable a nivel de BD" que consumen los seguros paramétricos.
+// La unicidad (stationKey + date) garantiza un único registro autoritativo por día.
+model OracleWeatherDataCache {
+  id              Int      @id @default(autoincrement())
+  stationKey      String   // estación/zona de referencia (ej. "cusco-quispicanchi")
+  date            DateTime // día calendario (00:00) al que corresponde la lectura
+  tempMaxC        Float
+  tempMinC        Float
+  tempAvgC        Float
+  precipitationMm Float
+  humidityPct     Float?
+  source          String   @default("SENAMHI_SIM") // proveedor del dato
+  payloadHash     String   // SHA-256 del payload crudo (integridad / "inmutabilidad")
+  fetchedAt       DateTime @default(now())
+
+  @@unique([stationKey, date]) // un registro autoritativo por estación y día
+  @@index([stationKey])
+  @@index([date])
 }
