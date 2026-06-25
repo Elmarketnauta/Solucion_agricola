@@ -1,3 +1,4 @@
+// Developed by Marketnauta
 import prisma from '../db';
 
 export class LedgerService {
@@ -48,6 +49,15 @@ export class LedgerService {
       // 3. ATOMIC conditional debit — only succeeds if balance >= amount in the
       //    same statement. Eliminates the read-then-write race and guarantees
       //    the balance can never go negative (no SELECT ... FOR UPDATE needed).
+      //
+      //    CONCURRENCIA EN POSTGRES (importante): este UPDATE condicional es
+      //    seguro bajo el nivel de aislamiento por defecto (READ COMMITTED).
+      //    El UPDATE toma un row lock sobre la wallet; si dos transacciones
+      //    intentan debitar la misma fila a la vez, la segunda ESPERA al commit
+      //    de la primera y RE-EVALÚA el predicado `balance >= amount` contra el
+      //    valor ya actualizado. Por eso no hay lost-update ni sobregiro.
+      //    No cambiar este patrón por un read-then-write en código: reintroduce
+      //    la carrera. (Cubierto por la prueba de doble-gasto concurrente.)
       const debited = await tx.wallet.updateMany({
         where: { merchantId: sender.id, balance: { gte: amount } },
         data: { balance: { decrement: amount } }

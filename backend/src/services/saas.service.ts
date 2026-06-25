@@ -1,3 +1,4 @@
+// Developed by Marketnauta
 import prisma from '../db';
 
 export class SaasService {

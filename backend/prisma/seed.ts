@@ -1,3 +1,4 @@
+// Developed by Marketnauta
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import 'dotenv/config';

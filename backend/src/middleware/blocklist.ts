@@ -1,3 +1,4 @@
+// Developed by Marketnauta
 // In-memory JTI blocklist for token revocation.
 // Entries survive until the process restarts — sufficient for MVP.
 // Production: replace with a Redis SET + TTL matching the JWT expiry (7d).

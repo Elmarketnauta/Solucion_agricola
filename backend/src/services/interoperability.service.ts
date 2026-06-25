@@ -1,3 +1,4 @@
+// Developed by Marketnauta
 import prisma from '../db';
 import { LedgerService } from './ledger.service';
 import { CreditService } from './credit.service';

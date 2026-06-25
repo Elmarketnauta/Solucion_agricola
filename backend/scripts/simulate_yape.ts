@@ -1,3 +1,4 @@
+// Developed by Marketnauta
 import crypto from 'crypto';
 
 async function simulateYapePayment() {
