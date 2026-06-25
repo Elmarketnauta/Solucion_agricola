@@ -50,16 +50,20 @@ export async function balanceOf(phoneNumber: string): Promise<number> {
  * Se llama en beforeEach para que cada prueba arranque con BD vacía.
  */
 export async function resetDb() {
-  // Hijos primero (agro + AgTech), luego MVP, luego padres.
+  // Hijos primero (agro + AgTech + soluciones 6–10), luego MVP, luego padres.
   await (prisma as any).ioTSensorTelemetry.deleteMany();
+  await (prisma as any).droneTelemetryCache.deleteMany();
   await (prisma as any).agroAlert.deleteMany();
+  await (prisma as any).riskAlert.deleteMany();
   await (prisma as any).campaignInput.deleteMany();
   await (prisma as any).certificationToken.deleteMany();
   await (prisma as any).subsidyDisbursement.deleteMany();
   await (prisma as any).insurancePolicy.deleteMany();
   await (prisma as any).agroCampaign.deleteMany();
+  await (prisma as any).agroParcel.deleteMany();
   await (prisma as any).offlineSignedTx?.deleteMany?.();
   await (prisma as any).oracleWeatherDataCache.deleteMany();
+  await (prisma as any).govSubsidyDisbursement.deleteMany();
   await (prisma as any).producerProfile.deleteMany();
   await prisma.salesLedger.deleteMany();
   await prisma.loanInstallment.deleteMany();
@@ -85,13 +89,14 @@ export async function createProducerWithCampaign(opts: {
   harvestWeightKg?: number;
   crop?: string;
 } = {}) {
-  const m = await createMerchant({ balance: opts.balance ?? 0 });
+  const m = await createMerchant({ balance: opts.balance ?? 0, withCreditLine: true });
   const producer = await (prisma as any).producerProfile.create({
     data: {
       merchantId: m.id,
       dni: opts.dni ?? uniqueDni(),
       ppaVerified: opts.ppaVerified ?? true,
       ppaCode: 'PPA-TEST-001',
+      agroDigitalId: (opts.ppaVerified ?? true) ? `AGD-${uniqueDni()}` : null,
       hectares: opts.hectares ?? 3,
       region: opts.region ?? 'Cusco',
       gpsLat: opts.gpsLat ?? -13.52,
