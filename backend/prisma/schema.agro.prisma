@@ -1,0 +1,154 @@
+// ============================================================================
+// Yunta-Agro — Esquema de datos extendido (DISEÑO / Fase 1)
+// ----------------------------------------------------------------------------
+// Este archivo es una REFERENCIA DE DISEÑO. No reemplaza schema.prisma todavía.
+// Los modelos aquí se fusionan en el schema principal en la Fase 1 (migración a
+// PostgreSQL + capa Web3). Reutiliza MerchantProfile como la entidad base del
+// productor (un agricultor es un "merchant" cuyo negocio es su parcela).
+//
+// Convenciones heredadas del MVP:
+//   - montos en Float (PEN) off-chain; en Fase 3 el saldo autoritativo migra a
+//     entero on-chain (uint256). Aquí se mantiene Float por continuidad.
+//   - status como String con comentario de enum (estilo del schema actual).
+// ============================================================================
+
+// ─── Identidad agraria (KYC sin fricción vía PPA/MIDAGRI) ───────────────────
+model ProducerProfile {
+  id              Int      @id @default(autoincrement())
+  merchantId      Int      @unique          // 1:1 con MerchantProfile del MVP
+  dni             String   @unique          // 8 dígitos — clave de consulta al PPA
+  ppaVerified     Boolean  @default(false)  // true si aparece en el Padrón
+  ppaCode         String?                   // código de productor en el PPA
+  hectares        Float    @default(0)      // tenencia declarada/verificada
+  region          String?                   // departamento/provincia
+  gpsLat          Float?                    // polígono de la parcela (para oráculo)
+  gpsLng          Float?
+  mainCrop        String?                   // cultivo principal
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  campaigns       AgroCampaign[]
+  subsidies       SubsidyDisbursement[]
+  policies        InsurancePolicy[]
+  certifications  CertificationToken[]
+}
+
+// ─── Libro de campaña (SaaS agronómico) ─────────────────────────────────────
+model AgroCampaign {
+  id               Int       @id @default(autoincrement())
+  producerId       Int
+  crop             String                       // cultivo de la campaña
+  season           String                       // e.g. "2026-A"
+  inputCostTotal   Float     @default(0)         // gasto en insumos (semilla, fertilizante, jornales)
+  harvestWeightKg  Float     @default(0)         // peso entregado (0 hasta cosechar)
+  buyerName        String?                       // agroexportadora/acopiador
+  salePricePerKg   Float?
+  status           String    @default("Planted") // Planted, Growing, Harvested, Sold
+  startedAt        DateTime  @default(now())
+  harvestedAt      DateTime?
+
+  producer         ProducerProfile @relation(fields: [producerId], references: [id])
+  inputs           CampaignInput[]
+  certification    CertificationToken?
+
+  @@index([producerId])
+}
+
+model CampaignInput {
+  id           Int      @id @default(autoincrement())
+  campaignId   Int
+  type         String   // Seed, Fertilizer, Labor, Pesticide
+  description  String
+  amount       Float    // costo en PEN
+  purchasedAt  DateTime @default(now())
+  paidWith     String   @default("Subsidy") // Subsidy, Credit, Own
+
+  campaign     AgroCampaign @relation(fields: [campaignId], references: [id])
+
+  @@index([campaignId])
+}
+
+// ─── Token de certificación tributaria (VC tokenizada — Ley 32434) ──────────
+model CertificationToken {
+  id              Int      @id @default(autoincrement())
+  campaignId      Int      @unique
+  producerId      Int
+  productKg       Float
+  buyerRuc        String                       // RUC de la agroexportadora
+  taxYear         Int
+  deductiblePct   Float    @default(0.25)       // 25% IR bajo Ley 32434
+  // Anclaje on-chain: hash de la VC en la Layer-2. Off-chain guardamos el hash,
+  // nunca el PII completo (cumplimiento + privacidad).
+  vcHash          String   @unique
+  chainTxHash     String?                       // tx de emisión en L2
+  status          String   @default("Issued")   // Issued, Presented_SUNAT, Validated
+  issuedAt        DateTime @default(now())
+
+  campaign        AgroCampaign    @relation(fields: [campaignId], references: [id])
+  producer        ProducerProfile @relation(fields: [producerId], references: [id])
+
+  @@index([producerId])
+  @@index([buyerRuc])
+}
+
+// ─── Dispersión de subsidios estatales (flujo de entrada cautivo) ───────────
+model SubsidyDisbursement {
+  id            Int      @id @default(autoincrement())
+  producerId    Int
+  program       String   // FertiBono, AgroIdeas, etc.
+  amount        Float
+  // Trazabilidad: se libera el subsidio y luego se reconcilia contra CampaignInput
+  // para probar que se gastó en insumos reales (auditoría anti-desvío para el Estado).
+  spentOnInputs Float    @default(0)
+  status        String   @default("Disbursed") // Disbursed, PartiallySpent, Reconciled
+  disbursedAt   DateTime @default(now())
+
+  producer      ProducerProfile @relation(fields: [producerId], references: [id])
+
+  @@index([producerId])
+}
+
+// ─── Seguro paramétrico (espejo off-chain del contrato on-chain) ────────────
+model InsurancePolicy {
+  id                  Int       @id @default(autoincrement())
+  producerId          Int
+  chainPolicyId       String    @unique        // id de la póliza en el contrato L2
+  crop                String
+  gpsLat              Float
+  gpsLng              Float
+  rainThresholdMm     Float                     // umbral de sequía (mm acumulados)
+  coverageAmount      Float                     // indemnización en PEN
+  premium             Float
+  periodStart         DateTime
+  periodEnd           DateTime
+  status              String    @default("Active") // Active, Triggered, Expired, PaidOut
+  triggeredEventType  String?                   // Drought, Yaku, Flood
+  payoutTxId          Int?                      // FK a la Transaction fiat (TAPP/CCE) del MVP
+  createdAt           DateTime  @default(now())
+
+  producer            ProducerProfile @relation(fields: [producerId], references: [id])
+
+  @@index([producerId])
+  @@index([status])
+}
+
+// ─── Cola de pre-firma offline (Anillo 2/3: USSD / Mesh BLE) ────────────────
+model OfflineSignedTx {
+  id              Int      @id @default(autoincrement())
+  // La firma se genera en el dispositivo SIN internet; el backend la valida al
+  // sincronizar. idempotencyKey reusa el patrón anti-doble-gasto del MVP: una tx
+  // relayada dos veces por la red Mesh colisiona aquí y se procesa una sola vez.
+  idempotencyKey  String   @unique
+  producerPhone   String
+  payload         String                       // JSON firmado { buyer, kg, price, nonce, expiration }
+  signature       String                       // firma secp256k1 del productor
+  nonce           Int
+  expiresAt       DateTime                      // ventana anti-replay (estilo LACChain)
+  receivedVia     String   @default("Sync")     // Sync, USSD, MeshBLE
+  status          String   @default("Pending")  // Pending, Settled, Rejected_Expired, Rejected_Signature
+  receivedAt      DateTime @default(now())
+  settledAt       DateTime?
+
+  @@index([producerPhone])
+  @@index([status])
+}
