@@ -64,6 +64,7 @@ export async function resetDb() {
   await (prisma as any).offlineSignedTx?.deleteMany?.();
   await (prisma as any).oracleWeatherDataCache.deleteMany();
   await (prisma as any).govSubsidyDisbursement.deleteMany();
+  await (prisma as any).revokedToken?.deleteMany?.();
   await (prisma as any).producerProfile.deleteMany();
   await prisma.salesLedger.deleteMany();
   await prisma.loanInstallment.deleteMany();

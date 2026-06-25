@@ -13,11 +13,14 @@
 import cron from 'node-cron';
 import { WeatherOracleService } from '../services/weatherOracle.service';
 import { ParametricInsuranceService } from '../services/parametricInsurance.service';
+import { purgeExpired } from '../middleware/blocklist';
 
 const CRON_ENABLED = (process.env.CRON_ENABLED ?? 'true').toLowerCase() === 'true';
 // Por defecto 06:00 (oráculo) y 06:15 (seguros), hora del servidor.
 const ORACLE_CRON = process.env.ORACLE_CRON ?? '0 6 * * *';
 const INSURANCE_CRON = process.env.INSURANCE_CRON ?? '15 6 * * *';
+// Limpieza de JTIs expirados de la blocklist (diaria, 03:00).
+const BLOCKLIST_PURGE_CRON = process.env.BLOCKLIST_PURGE_CRON ?? '0 3 * * *';
 
 /** Ejecuta el ciclo completo una vez (oráculo → seguros). Reutilizable en tests. */
 export async function runDailyAgroCycle(forDate: Date = new Date()) {
@@ -51,5 +54,15 @@ export function startCronJobs() {
     }
   });
 
-  console.log(`⏱️  Cron AgTech activo — oráculo: "${ORACLE_CRON}", seguros: "${INSURANCE_CRON}".`);
+  // Purga de la blocklist: elimina JTIs cuyo JWT ya expiró (no reintroduce el token).
+  cron.schedule(BLOCKLIST_PURGE_CRON, async () => {
+    try {
+      const n = await purgeExpired();
+      if (n > 0) console.log(`[cron:blocklist] ${n} token(s) revocado(s) expirado(s) purgado(s).`);
+    } catch (e) {
+      console.error('[cron:blocklist] error:', e instanceof Error ? e.message : e);
+    }
+  });
+
+  console.log(`⏱️  Cron AgTech activo — oráculo: "${ORACLE_CRON}", seguros: "${INSURANCE_CRON}", purga blocklist: "${BLOCKLIST_PURGE_CRON}".`);
 }

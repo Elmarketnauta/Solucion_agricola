@@ -12,6 +12,18 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// JTIs de JWT revocados (logout). Persistente para que la revocación SOBREVIVA a
+// reinicios del servidor (corrige el riesgo P0-3: blocklist en memoria volátil).
+// expiresAt = expiración del token: tras esa fecha el JWT ya no es válido por sí
+// mismo, así que la fila puede purgarse sin reintroducir el token.
+model RevokedToken {
+  jti       String   @id
+  expiresAt DateTime
+  revokedAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
 model MerchantProfile {
   id           Int      @id @default(autoincrement())
   uuid         String   @unique @default(uuid())

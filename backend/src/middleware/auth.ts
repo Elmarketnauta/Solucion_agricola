@@ -27,13 +27,13 @@ export function extractToken(req: Request): string | null {
   return null;
 }
 
-export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
+export async function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   const token = extractToken(req);
   if (!token) return res.status(401).json({ error: 'Token requerido' });
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { phoneNumber: string; jti: string };
-    if (decoded.jti && isRevoked(decoded.jti)) {
+    if (decoded.jti && await isRevoked(decoded.jti)) {
       return res.status(401).json({ error: 'Sesión cerrada' });
     }
     req.merchantPhone = decoded.phoneNumber;
@@ -47,9 +47,17 @@ export function signToken(phoneNumber: string): string {
   return jwt.sign({ phoneNumber, jti: randomUUID() }, JWT_SECRET, { expiresIn: '7d' });
 }
 
-export function tryRevokeToken(token: string): void {
+/**
+ * Revoca el token en el logout: persiste su JTI hasta la expiración del propio
+ * JWT (así no se guarda para siempre). Async porque escribe en la BD.
+ */
+export async function tryRevokeToken(token: string): Promise<void> {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { jti?: string };
-    if (decoded.jti) revoke(decoded.jti);
+    const decoded = jwt.verify(token, JWT_SECRET) as { jti?: string; exp?: number };
+    if (decoded.jti) {
+      // `exp` viene en segundos epoch; si falta, usa el máximo (7d) por seguridad.
+      const expiresAt = decoded.exp ? new Date(decoded.exp * 1000) : new Date(Date.now() + 7 * 864e5);
+      await revoke(decoded.jti, expiresAt);
+    }
   } catch { /* expired/invalid — nothing to revoke */ }
 }

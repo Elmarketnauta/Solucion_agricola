@@ -25,6 +25,7 @@ import { OfflineService } from './services/offline.service';
 import { DroneTelemetryService } from './services/droneTelemetry.service';
 import { startCronJobs } from './cron';
 import { authMiddleware, signToken, extractToken, tryRevokeToken, AuthRequest } from './middleware/auth';
+import { loadCache as loadRevokedTokens } from './middleware/blocklist';
 import { lnetConfig, missingLnetConfig } from './config/lnet.config';
 
 const app = express();
@@ -299,9 +300,9 @@ app.post('/api/transfer/validate', authMiddleware, validateLimiter, async (req: 
   }
 });
 
-app.post('/api/auth/logout', (req, res) => {
+app.post('/api/auth/logout', async (req, res) => {
   const token = extractToken(req);
-  if (token) tryRevokeToken(token);
+  if (token) await tryRevokeToken(token); // revocación persistente (sobrevive reinicios)
   res.clearCookie(SESSION_COOKIE, { path: '/' });
   res.json({ success: true });
 });
@@ -892,8 +893,17 @@ app.use((_req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`✅ Yunta Backend Server running on http://localhost:${PORT}`);
+
+  // Hidrata la blocklist de JWT revocados desde la BD (P0-3): la revocación
+  // sobrevive a reinicios. Si la BD no está lista, no se cae el server.
+  try {
+    const n = await loadRevokedTokens();
+    console.log(`🔒 Blocklist JWT: ${n} token(s) revocado(s) cargados desde la BD.`);
+  } catch (e) {
+    console.warn('⚠️  No se pudo hidratar la blocklist JWT (¿BD no disponible?):', e instanceof Error ? e.message : e);
+  }
 
   // Estado de la capa Web3/Lnet (Fase 3). NO conecta a la blockchain: solo
   // informa si la configuración está lista. Mientras esté deshabilitada, el
