@@ -19,6 +19,7 @@
 
 import prisma from '../db';
 import { MidagriService } from './midagri.service';
+import { DroneTelemetryService } from './droneTelemetry.service';
 
 export interface AgroScoreBreakdown {
   total: number;
@@ -28,7 +29,10 @@ export interface AgroScoreBreakdown {
   campaignHistory: number;
   inputDiscipline: number;
   settlementFlow: number;
-  bioInputBonus: number; // Solución 3: bonus por biofertilizantes / restauración del microbioma
+  bioInputBonus: number;     // Solución 3: biofertilizantes / restauración del microbioma
+  geneticBonus: number;      // Solución 10: semillas mejoradas (roya/bajo cadmio/termotolerantes)
+  riskPenalty: number;       // Solución 9: penalización temporal por alertas de riesgo (drones)
+  creditUnlocked: boolean;   // Solución 7: ¿la identidad PPA habilita el microcrédito?
 }
 
 export interface CreditCostBreakdown {
@@ -66,6 +70,9 @@ export class AgroCreditService {
       inputDiscipline: 0,
       settlementFlow: 0,
       bioInputBonus: 0,
+      geneticBonus: 0,
+      riskPenalty: 0,
+      creditUnlocked: false,
     };
 
     // ── 1. KYC sin fricción vía PPA/MIDAGRI ─────────────────────────────────
@@ -99,7 +106,7 @@ export class AgroCreditService {
     const campaigns = producer.campaigns as Array<{
       harvestWeightKg: number;
       status: string;
-      inputs: Array<{ type: string; paidWith: string; description: string }>;
+      inputs: Array<{ type: string; paidWith: string; description: string; seedClass: string | null; geneticTrait: string | null }>;
     }>;
 
     const completedCampaigns = campaigns.filter(c => c.harvestWeightKg > 0);
@@ -114,12 +121,22 @@ export class AgroCreditService {
     // regenerativa: mejor suelo = menor riesgo de default a largo plazo.
     breakdown.bioInputBonus = this.scoreBioInputs(campaigns);
 
+    // ── 2c. Solución 10: bonus por genética mejorada ────────────────────────
+    // Semillas certificadas resistentes a roya / bajo cadmio / termotolerantes
+    // mitigan el riesgo de pérdida de cosecha → suman al score y bajan la TCEA.
+    breakdown.geneticBonus = this.scoreGenetics(campaigns);
+
     // ── 3. Flujo de liquidación interoperable (heredado de Yunta) ───────────
     // Pagos de agroexportadoras/acopiadores vía TAPP/CCE al teléfono del productor.
     breakdown.settlementFlow = await this.scoreSettlementFlow(producer.merchantId);
 
-    // ── Total con tope 1000 ─────────────────────────────────────────────────
-    breakdown.total = Math.min(
+    // ── 4. Solución 9: penalización temporal por riesgo (alertas de drones) ─
+    // Estrés térmico o enfermedad detectados por dron restan al score MIENTRAS la
+    // alerta no se resuelva: la evaluación de riesgo se ajusta dinámicamente.
+    breakdown.riskPenalty = await DroneTelemetryService.activeRiskDelta(producerId); // <= 0
+
+    // ── Total con tope 1000 y piso 0 ────────────────────────────────────────
+    breakdown.total = Math.max(0, Math.min(
       1000,
       breakdown.base +
         breakdown.ppaIdentity +
@@ -127,10 +144,17 @@ export class AgroCreditService {
         breakdown.campaignHistory +
         breakdown.inputDiscipline +
         breakdown.settlementFlow +
-        breakdown.bioInputBonus
-    );
+        breakdown.bioInputBonus +
+        breakdown.geneticBonus +
+        breakdown.riskPenalty
+    ));
 
-    await this.applyToCreditLine(producer.merchantId, breakdown.total);
+    // ── Solución 7: la identidad PPA es OBLIGATORIA para desbloquear crédito ─
+    // Sin identidad verificada en el padrón, no se habilita microcrédito (límite
+    // queda en 0) aunque el score sea alto. El KYC soberano es el gate.
+    breakdown.creditUnlocked = ppaVerified;
+
+    await this.applyToCreditLine(producer.merchantId, breakdown.total, breakdown.creditUnlocked);
     return breakdown;
   }
 
@@ -146,7 +170,7 @@ export class AgroCreditService {
    * Para Yunta-Agro los costos no financieros bajan con el score (mejor productor
    * = menos riesgo = menos comisión administrativa y prima de seguro).
    */
-  static computeCreditCost(tea: number, score: number, bioInputBonus = 0): CreditCostBreakdown {
+  static computeCreditCost(tea: number, score: number, bioInputBonus = 0, geneticBonus = 0): CreditCostBreakdown {
     // Comisión administrativa: 3.5% (score 300) → 1.0% (score 1000).
     const adminCommission = Math.max(1.0, 3.5 - ((score - 300) / 700) * 2.5);
     // Portes/desembolso anualizado: fijo y bajo (canal digital + COOPAC).
@@ -154,11 +178,12 @@ export class AgroCreditService {
     // Prima del seguro paramétrico anualizada: 2.5% (score 300) → 1.2% (score 1000).
     // El buen productor diversifica mejor el riesgo climático probado en campañas.
     const baseInsurance = Math.max(1.2, 2.5 - ((score - 300) / 700) * 1.3);
-    // Solución 3: "descuento verde". El manejo regenerativo (biofertilizantes,
-    // microbioma) reduce el riesgo agronómico → hasta 0.5% menos de prima de
-    // seguro. bioInputBonus va de 0 a 120 → descuento de 0 a 0.5 puntos.
+    // Descuento verde acumulado: prácticas que MITIGAN riesgo bajan la prima.
+    //  - Solución 3 (biofertilizantes/microbioma): bonus 0–120 → hasta 0.5%.
+    //  - Solución 10 (genética mejorada resistente a roya/cadmio): 0–100 → hasta 0.4%.
     const greenDiscount = Math.min(0.5, (bioInputBonus / 120) * 0.5);
-    const parametricInsurance = Math.max(0.9, baseInsurance - greenDiscount);
+    const geneticDiscount = Math.min(0.4, (geneticBonus / 100) * 0.4);
+    const parametricInsurance = Math.max(0.8, baseInsurance - greenDiscount - geneticDiscount);
 
     // Composición multiplicativa (metodología de costo efectivo).
     const factor =
@@ -226,6 +251,36 @@ export class AgroCreditService {
     return this.BIO_INPUTS.some(term => desc.includes(term));
   }
 
+  // Clases de semilla mejorada reconocidas (Solución 10).
+  private static readonly IMPROVED_SEED_CLASSES = ['CertifiedImproved', 'RustResistant', 'LowCadmium', 'HeatTolerant'];
+  // Léxico de rasgos genéticos resilientes en la descripción del Cashbook.
+  private static readonly GENETIC_TERMS = [
+    'resistente a roya', 'tolerante', 'bajo cadmio', 'termotolerante',
+    'semilla certificada', 'clon mejorado', 'variedad mejorada', 'inia',
+  ];
+
+  /**
+   * Solución 10: bonus por genética mejorada. Semillas certificadas resistentes a
+   * roya, de bajo cadmio o termotolerantes reducen el riesgo de pérdida de cosecha.
+   * +25 por campaña que las use, tope 100. Detecta por `seedClass` o por descripción.
+   */
+  private static scoreGenetics(
+    campaigns: Array<{ inputs: Array<{ type: string; description: string; seedClass: string | null; geneticTrait: string | null }> }>
+  ): number {
+    let pts = 0;
+    for (const c of campaigns) {
+      if (c.inputs.some(i => this.isImprovedSeed(i))) pts += 25;
+    }
+    return Math.min(100, pts);
+  }
+
+  /** ¿Este insumo es semilla mejorada? (por seedClass, geneticTrait o descripción). */
+  static isImprovedSeed(input: { type: string; description: string; seedClass: string | null; geneticTrait: string | null }): boolean {
+    if (input.seedClass && this.IMPROVED_SEED_CLASSES.includes(input.seedClass)) return true;
+    const text = `${input.description ?? ''} ${input.geneticTrait ?? ''}`.toLowerCase();
+    return this.GENETIC_TERMS.some(term => text.includes(term));
+  }
+
   /** Reutiliza el ledger del MVP: volumen recibido vía pagos interoperables. */
   private static async scoreSettlementFlow(merchantId: number): Promise<number> {
     const merchant = await prisma.merchantProfile.findUnique({
@@ -251,7 +306,7 @@ export class AgroCreditService {
    * Misma curva que el MVP (TEA de 45% a 15% según score), pero el límite se
    * ancla a hectáreas + historial de campaña en vez de a volumen transaccional.
    */
-  private static async applyToCreditLine(merchantId: number, score: number) {
+  private static async applyToCreditLine(merchantId: number, score: number, creditUnlocked: boolean) {
     const creditLine = await prisma.creditLine.findUnique({ where: { merchantId } });
     if (!creditLine) return;
 
@@ -259,11 +314,15 @@ export class AgroCreditService {
     // Se redondea a 2 decimales para no arrastrar ruido de Float a la UI.
     const interestRateEffective = round2(Math.max(15, 45 - ((score - 300) / 700) * 30));
 
-    // Límite: solo se eleva si el score supera 500 (umbral de confianza).
-    let creditLimit = creditLine.creditLimit;
-    if (score > 500) {
-      // Capital de trabajo proporcional a la capacidad productiva probada.
-      creditLimit = Math.max(creditLine.creditLimit, score * 2);
+    // Solución 7: sin identidad PPA verificada NO se desbloquea crédito (límite 0),
+    // aunque el score sea alto. El KYC soberano es el gate del microcrédito.
+    let creditLimit = 0;
+    if (creditUnlocked) {
+      creditLimit = creditLine.creditLimit;
+      if (score > 500) {
+        // Capital de trabajo proporcional a la capacidad productiva probada.
+        creditLimit = Math.max(creditLine.creditLimit, score * 2);
+      }
     }
 
     await prisma.creditLine.update({

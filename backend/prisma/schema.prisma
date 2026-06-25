@@ -127,6 +127,16 @@ model ProducerProfile {
   gpsLat          Float?
   gpsLng          Float?
   mainCrop        String?
+
+  // ── Solución 7: Identidad PPA completa (capa de identidad soberana) ────────
+  // Ancla KYC del Padrón de Productores Agrarios (>2.1M registros georreferenciados).
+  // En Fase 3 estos campos respaldan un DID/VC (SSI); hoy viven en Postgres.
+  agroDigitalId   String?  @unique // ID único del productor en AgroDigital/PPA
+  ppaIngestedAt   DateTime?         // cuándo se ingestó la identidad georreferenciada
+  identityHash    String?           // SHA-256 del snapshot de identidad (precursor de VC)
+  legalParcelCount Int     @default(0) // nº de parcelas declaradas en el padrón
+  verifiedHectares Float  @default(0)  // superficie verificada (suma de parcelas)
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -135,6 +145,28 @@ model ProducerProfile {
   subsidies       SubsidyDisbursement[]
   policies        InsurancePolicy[]
   certifications  CertificationToken[]
+  parcels         AgroParcel[]
+  riskAlerts      RiskAlert[]
+}
+
+// ── Solución 7: parcelas georreferenciadas del PPA (un productor, N parcelas) ─
+model AgroParcel {
+  id            Int      @id @default(autoincrement())
+  producerId    Int
+  parcelCode    String   // código catastral / de padrón de la parcela
+  hectares      Float
+  gpsLat        Float
+  gpsLng        Float
+  district      String?
+  province      String?
+  region        String?
+  landTenure    String   @default("Owner") // Owner, Possessor, Communal
+  createdAt     DateTime @default(now())
+
+  producer      ProducerProfile @relation(fields: [producerId], references: [id])
+
+  @@unique([producerId, parcelCode])
+  @@index([producerId])
 }
 
 model AgroCampaign {
@@ -155,6 +187,7 @@ model AgroCampaign {
   certification    CertificationToken?
   telemetry        IoTSensorTelemetry[]
   alerts           AgroAlert[]
+  droneScans       DroneTelemetryCache[]
 
   @@index([producerId])
 }
@@ -162,11 +195,18 @@ model AgroCampaign {
 model CampaignInput {
   id           Int      @id @default(autoincrement())
   campaignId   Int
-  type         String   // Seed, Fertilizer, Labor, Pesticide
+  type         String   // Seed, Fertilizer, Labor, Pesticide, BioFertilizer
   description  String
   amount       Float
   purchasedAt  DateTime @default(now())
   paidWith     String   @default("Subsidy") // Subsidy, Credit, Own
+
+  // ── Solución 10: biotecnología / mejoramiento genético ────────────────────
+  // Clase de semilla declarada en el Cashbook. "CertifiedImproved" = variedad
+  // mejorada (tolerante a estrés térmico, resistente a roya, clon bajo cadmio),
+  // que reduce el riesgo de pérdida de cosecha → bonifica el score y baja la TCEA.
+  seedClass    String?  // Conventional, CertifiedImproved, RustResistant, LowCadmium, HeatTolerant
+  geneticTrait String?  // marcador/rasgo declarado (ej. "Resistente a roya — INIA")
 
   campaign     AgroCampaign @relation(fields: [campaignId], references: [id])
 
@@ -341,4 +381,71 @@ model OracleWeatherDataCache {
   @@unique([stationKey, date]) // un registro autoritativo por estación y día
   @@index([stationKey])
   @@index([date])
+}
+
+// ============================================================================
+// Yunta-Agro — Capa Precursora (Soluciones 6–10). Developed by Marketnauta
+// ============================================================================
+
+// ── Solución 9: agricultura de precisión — caché de telemetría de drones ─────
+// Payloads de drones multiespectrales / visión computacional de terceros.
+model DroneTelemetryCache {
+  id              Int      @id @default(autoincrement())
+  campaignId      Int
+  provider        String   // proveedor del vuelo/análisis (ej. "AgriVision")
+  flightId        String   // identificador del vuelo
+  ndvi            Float?   // Índice de Vegetación de Diferencia Normalizada (0–1)
+  ndre            Float?   // Normalized Difference Red Edge (estrés/clorofila)
+  canopyTempC     Float?   // temperatura del dosel (estrés térmico)
+  thermalStress   Boolean  @default(false) // el análisis reporta estrés térmico
+  diseaseDetected Boolean  @default(false) // detección de enfermedad (roya, etc.)
+  diseaseLabel    String?  // etiqueta de la enfermedad/plaga detectada
+  fruitMaturityPct Float?  // % de madurez de fruto (ej. arándanos)
+  affectedAreaPct Float?   // % del área con anomalía
+  payloadHash     String   // SHA-256 del payload crudo (integridad)
+  capturedAt      DateTime // timestamp del vuelo
+  ingestedAt      DateTime @default(now())
+
+  campaign        AgroCampaign @relation(fields: [campaignId], references: [id])
+
+  @@index([campaignId])
+  @@index([flightId])
+}
+
+// Alertas de RIESGO a nivel de PRODUCTOR (no de campaña): consolidan señales de
+// drones, clima y telemetría para ajustar dinámicamente la evaluación crediticia.
+model RiskAlert {
+  id            Int      @id @default(autoincrement())
+  producerId    Int
+  source        String   // Drone, Weather, IoT, Manual
+  category      String   // ThermalStress, Disease, Drought, Flood
+  severity      String   @default("Warning") // Info, Warning, Critical
+  message       String
+  riskDelta     Int      @default(0) // impacto temporal en el score (ej. -40)
+  resolved      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  producer      ProducerProfile @relation(fields: [producerId], references: [id])
+
+  @@index([producerId])
+  @@index([resolved])
+}
+
+// ── Solución 6: liquidación de subsidios gubernamentales vía TAPP (BCRP) ─────
+// Registro de desembolsos fiduciarios (Fertiabono, etc.) recibidos por el riel
+// interoperable TAPP y liquidados en la billetera del productor.
+model GovSubsidyDisbursement {
+  id              Int      @id @default(autoincrement())
+  programCode     String   // FERTIABONO, AGROIDEAS, etc.
+  beneficiaryPhone String  // teléfono del productor beneficiario
+  beneficiaryDni  String?  // DNI (conciliación con el PPA)
+  amount          Float    // monto en soles
+  rail            String   @default("TAPP") // riel de pago (TAPP/BCRP)
+  bcrpReference   String   @unique // referencia única del BCRP (idempotencia)
+  status          String   @default("Settled") // Settled, Failed
+  ledgerTxId      Int?     // transacción de liquidación en el ledger
+  disbursedAt     DateTime @default(now())
+
+  @@index([beneficiaryPhone])
+  @@index([programCode])
 }

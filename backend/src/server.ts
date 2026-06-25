@@ -19,6 +19,10 @@ import { TelemetryService } from './services/telemetry.service';
 import { CertificationService } from './services/certification.service';
 import { ParametricInsuranceService } from './services/parametricInsurance.service';
 import { WeatherOracleService } from './services/weatherOracle.service';
+import { TappService } from './services/tapp.service';
+import { PpaService } from './services/ppa.service';
+import { OfflineService } from './services/offline.service';
+import { DroneTelemetryService } from './services/droneTelemetry.service';
 import { startCronJobs } from './cron';
 import { authMiddleware, signToken, extractToken, tryRevokeToken, AuthRequest } from './middleware/auth';
 import { lnetConfig, missingLnetConfig } from './config/lnet.config';
@@ -383,8 +387,9 @@ app.post('/api/agro/score', authMiddleware, async (req: AuthRequest, res) => {
     });
     const tea = merchant?.creditLine?.interestRateEffective ?? 45;
 
-    // Costo total del crédito (TCEA) — la cifra que la SBS exige mostrar.
-    const cost = AgroCreditService.computeCreditCost(tea, breakdown.total);
+    // Costo total del crédito (TCEA) — la cifra que la SBS exige mostrar. El
+    // descuento verde + genético (bio/semilla mejorada) baja la prima de seguro.
+    const cost = AgroCreditService.computeCreditCost(tea, breakdown.total, breakdown.bioInputBonus, breakdown.geneticBonus);
 
     // Recomendación educativa personalizada: qué hacer para mejorar y por qué.
     const guidance = buildAgroGuidance(breakdown, merchant?.producer ?? null);
@@ -678,6 +683,185 @@ app.get('/api/agro/certification/:certUuid', async (req, res) => {
   } catch (error: any) {
     console.error('[certification/verify] error:', error instanceof Error ? error.message : 'unknown');
     res.status(500).json({ error: 'Error al verificar certificación' });
+  }
+});
+
+// ── Solución 6: webhook TAPP/BCRP — liquidación de subsidios (Fertiabono) ────
+// Recibe un desembolso gubernamental por el riel interoperable TAPP y lo liquida
+// en la billetera del productor. Autenticado por firma HMAC del BCRP (X-Tapp-Signature).
+const tappSchema = z.object({
+  programCode: z.string().min(1),
+  beneficiaryPhone: z.string().min(6),
+  beneficiaryDni: z.string().regex(/^\d{8}$/).optional(),
+  amount: z.number().positive(),
+  bcrpReference: z.string().min(1),
+});
+
+app.post('/api/webhook/tapp', async (req, res) => {
+  try {
+    const rawBody = JSON.stringify(req.body);
+    if (!TappService.verifySignature(rawBody, req.headers['x-tapp-signature'] as string)) {
+      return res.status(401).json({ error: 'Firma TAPP inválida' });
+    }
+    const payload = tappSchema.parse(req.body);
+    const result = await TappService.disburseSubsidy(payload);
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues[0]?.message ?? 'Datos inválidos' });
+    if (/no encontrado/i.test(error.message)) return res.status(404).json({ error: error.message });
+    console.error('[webhook/tapp] error:', error instanceof Error ? error.message : 'unknown');
+    res.status(500).json({ error: 'Error al liquidar el subsidio' });
+  }
+});
+
+// ── Solución 7: ingesta de identidad PPA georreferenciada ────────────────────
+const ppaIngestSchema = z.object({
+  parcels: z.array(z.object({
+    parcelCode: z.string().min(1), hectares: z.number().positive(),
+    gpsLat: z.number(), gpsLng: z.number(),
+    district: z.string().optional(), province: z.string().optional(),
+    region: z.string().optional(), landTenure: z.string().optional(),
+  })).optional(),
+});
+
+app.post('/api/agro/ppa/ingest', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const producer = await getProducerOrNull(req.merchantPhone!);
+    if (!producer) return res.status(404).json({ error: 'Productor no encontrado. Regístrate en /api/agro/onboard' });
+    const { parcels } = ppaIngestSchema.parse(req.body);
+    const result = await PpaService.ingestIdentity(producer.id, parcels);
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues[0]?.message ?? 'Datos inválidos' });
+    console.error('[agro/ppa/ingest] error:', error instanceof Error ? error.message : 'unknown');
+    res.status(500).json({ error: 'Error al ingestar la identidad PPA' });
+  }
+});
+
+// ── Solución 8: sincronización de transacciones offline (USSD/Mesh) en lote ──
+const offlineSyncSchema = z.object({
+  transactions: z.array(z.object({
+    idempotencyKey: z.string().min(1),
+    producerPhone: z.string().min(6),
+    receiverPhone: z.string().min(6),
+    amount: z.number().positive(),
+    nonce: z.number().int().nonnegative(),
+    signature: z.string().min(1),
+    expiresAt: z.string(),
+    receivedVia: z.enum(['Sync', 'USSD', 'MeshBLE']).optional(),
+  })).min(1),
+});
+
+app.post('/api/offline/sync', async (req, res) => {
+  try {
+    const { transactions } = offlineSyncSchema.parse(req.body);
+    const result = await OfflineService.syncBatch(transactions);
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues[0]?.message ?? 'Datos inválidos' });
+    console.error('[offline/sync] error:', error instanceof Error ? error.message : 'unknown');
+    res.status(500).json({ error: 'Error al sincronizar transacciones offline' });
+  }
+});
+
+// ── Solución 9: ingesta de telemetría de drones (visión computacional) ───────
+const droneSchema = z.object({
+  campaignId: z.number().int().positive(),
+  provider: z.string().min(1),
+  flightId: z.string().min(1),
+  capturedAt: z.string(),
+  ndvi: z.number().optional(),
+  ndre: z.number().optional(),
+  canopyTempC: z.number().optional(),
+  thermalStress: z.boolean().optional(),
+  diseaseDetected: z.boolean().optional(),
+  diseaseLabel: z.string().optional(),
+  fruitMaturityPct: z.number().optional(),
+  affectedAreaPct: z.number().optional(),
+});
+
+app.post('/api/agro/drone/ingest', async (req, res) => {
+  try {
+    // Auth M2M por API key del proveedor de drones (si está configurada).
+    const droneKey = process.env.DRONE_PROVIDER_KEY;
+    if (droneKey && req.headers['x-drone-key'] !== droneKey) {
+      return res.status(401).json({ error: 'Proveedor de drones no autorizado' });
+    }
+    const payload = droneSchema.parse(req.body);
+    const result = await DroneTelemetryService.ingest(payload);
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues[0]?.message ?? 'Datos inválidos' });
+    if (/no encontrada/i.test(error.message)) return res.status(404).json({ error: error.message });
+    console.error('[agro/drone/ingest] error:', error instanceof Error ? error.message : 'unknown');
+    res.status(500).json({ error: 'Error al ingerir telemetría de dron' });
+  }
+});
+
+// ── Lectura consolidada para el Centro Agronómico (soluciones 6–10) ──────────
+// Devuelve en una sola llamada: identidad PPA + parcelas georreferenciadas,
+// alertas de riesgo (drones), recibos de subsidios TAPP, últimos escaneos de
+// dron y recibos de sincronización offline. El frontend lo pinta sin N llamadas.
+app.get('/api/agro/center', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const producer = await getProducerOrNull(req.merchantPhone!);
+    if (!producer) return res.status(404).json({ error: 'Productor no encontrado' });
+    const phone = req.merchantPhone!;
+
+    const campaign = await prisma.agroCampaign.findFirst({
+      where: { producerId: producer.id }, orderBy: { startedAt: 'desc' },
+    });
+
+    const [full, parcels, riskAlerts, subsidies, droneScans, offlineTxs] = await Promise.all([
+      prisma.producerProfile.findUnique({ where: { id: producer.id } }),
+      prisma.agroParcel.findMany({ where: { producerId: producer.id }, orderBy: { hectares: 'desc' } }),
+      prisma.riskAlert.findMany({ where: { producerId: producer.id, resolved: false }, orderBy: { createdAt: 'desc' } }),
+      prisma.govSubsidyDisbursement.findMany({ where: { beneficiaryPhone: phone }, orderBy: { disbursedAt: 'desc' }, take: 10 }),
+      campaign ? prisma.droneTelemetryCache.findMany({ where: { campaignId: campaign.id }, orderBy: { capturedAt: 'desc' }, take: 5 }) : Promise.resolve([]),
+      prisma.offlineSignedTx.findMany({ where: { producerPhone: phone }, orderBy: { receivedAt: 'desc' }, take: 10 }),
+    ]);
+
+    res.json({
+      success: true,
+      // Solución 7 — identidad soberana
+      identity: {
+        ppaVerified: full?.ppaVerified ?? false,
+        agroDigitalId: full?.agroDigitalId ?? null,
+        identityHash: full?.identityHash ?? null,
+        ppaCode: full?.ppaCode ?? null,
+        legalParcelCount: full?.legalParcelCount ?? 0,
+        verifiedHectares: full?.verifiedHectares ?? 0,
+        ppaIngestedAt: full?.ppaIngestedAt ?? null,
+        region: full?.region ?? null,
+      },
+      parcels: parcels.map(p => ({
+        parcelCode: p.parcelCode, hectares: p.hectares, gpsLat: p.gpsLat, gpsLng: p.gpsLng,
+        district: p.district, province: p.province, region: p.region, landTenure: p.landTenure,
+      })),
+      // Solución 9 — riesgo agronómico
+      riskAlerts: riskAlerts.map(a => ({
+        id: a.id, source: a.source, category: a.category, severity: a.severity,
+        message: a.message, riskDelta: a.riskDelta, createdAt: a.createdAt,
+      })),
+      droneScans: droneScans.map(d => ({
+        flightId: d.flightId, provider: d.provider, ndvi: d.ndvi, canopyTempC: d.canopyTempC,
+        thermalStress: d.thermalStress, diseaseDetected: d.diseaseDetected, diseaseLabel: d.diseaseLabel,
+        affectedAreaPct: d.affectedAreaPct, fruitMaturityPct: d.fruitMaturityPct, capturedAt: d.capturedAt,
+      })),
+      // Solución 6 — subsidios TAPP
+      subsidies: subsidies.map(s => ({
+        programCode: s.programCode, amount: s.amount, rail: s.rail,
+        bcrpReference: s.bcrpReference, status: s.status, disbursedAt: s.disbursedAt,
+      })),
+      // Solución 8 — recibos de sincronización offline
+      offlineTxs: offlineTxs.map(t => ({
+        idempotencyKey: t.idempotencyKey, nonce: t.nonce, receivedVia: t.receivedVia,
+        status: t.status, receivedAt: t.receivedAt, settledAt: t.settledAt,
+      })),
+    });
+  } catch (error: any) {
+    console.error('[agro/center] error:', error instanceof Error ? error.message : 'unknown');
+    res.status(500).json({ error: 'Error al cargar el Centro Agronómico' });
   }
 });
 
