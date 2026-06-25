@@ -1661,3 +1661,23 @@ a:hover { color: var(--verde-hover); }
 .agro-spark-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin-top: var(--space-sm); }
 .agro-spark-stats { display: flex; gap: var(--space-sm); font-size: var(--fs-xs); color: var(--text-muted); }
 .agro-spark-stats b { color: var(--text-primary); }
+
+/* Soluciones 6–10: mapa esquemático de parcelas + listas de registros */
+.agro-map {
+  position: relative; height: 140px; border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #E8F3EC 0%, #DDEDE3 100%);
+  border: 1px solid var(--border-default); overflow: hidden;
+}
+.agro-map-pin { position: absolute; transform: translate(-50%, -100%); font-size: 1rem; line-height: 1; }
+.agro-map-pin span { position: absolute; top: 1px; left: 50%; transform: translateX(-50%); font-size: 0.55rem; font-weight: 800; color: #fff; }
+.agro-map-note { position: absolute; bottom: 4px; right: 6px; font-size: 0.6rem; color: var(--text-muted); font-family: ui-monospace, Menlo, monospace; }
+.agro-parcel-list { display: flex; flex-direction: column; gap: var(--space-sm); }
+.agro-parcel-row { display: flex; align-items: center; gap: var(--space-sm); background: var(--hueso); border-radius: var(--radius-md); padding: var(--space-sm) var(--space-md); }
+.agro-parcel-idx {
+  flex-shrink: 0; width: 24px; height: 24px; border-radius: var(--radius-full);
+  background: var(--brote-light); color: #0A7A3E; font-size: var(--fs-xs); font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+}
+.agro-parcel-body { flex: 1; min-width: 0; }
+.agro-parcel-code { font-weight: 600; font-size: var(--fs-sm); }
+.agro-parcel-meta { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 1px; }

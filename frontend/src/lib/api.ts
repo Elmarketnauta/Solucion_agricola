@@ -106,6 +106,12 @@ class ApiClient {
       `/api/agro/telemetry/${campaignId}/series`);
   }
 
+  // Lectura consolidada de las soluciones 6–10 (identidad PPA, parcelas, riesgo,
+  // subsidios TAPP, escaneos de dron, recibos offline).
+  agroCenter() {
+    return this.request<AgroCenterData>('/api/agro/center');
+  }
+
   // Verificación pública del pasaporte EUDR (sin auth en backend, pero el cliente
   // usa la misma ruta). Devuelve null-safe vía 404 manejado por el caller.
   certificationVerify(certUuid: string) {
@@ -138,6 +144,42 @@ export interface TelemetrySeries {
 export interface OracleReading {
   stationKey: string; date: string; tempMaxC: number; tempMinC: number; tempAvgC: number;
   precipitationMm: number; humidityPct: number | null; payloadHash: string; source: string;
+}
+// ── Soluciones 6–10: payload consolidado del Centro Agronómico ──────────────
+export interface AgroIdentity {
+  ppaVerified: boolean; agroDigitalId: string | null; identityHash: string | null;
+  ppaCode: string | null; legalParcelCount: number; verifiedHectares: number;
+  ppaIngestedAt: string | null; region: string | null;
+}
+export interface AgroParcel {
+  parcelCode: string; hectares: number; gpsLat: number; gpsLng: number;
+  district: string | null; province: string | null; region: string | null; landTenure: string;
+}
+export interface RiskAlert {
+  id: number; source: string; category: string; severity: string;
+  message: string; riskDelta: number; createdAt: string;
+}
+export interface DroneScan {
+  flightId: string; provider: string; ndvi: number | null; canopyTempC: number | null;
+  thermalStress: boolean; diseaseDetected: boolean; diseaseLabel: string | null;
+  affectedAreaPct: number | null; fruitMaturityPct: number | null; capturedAt: string;
+}
+export interface SubsidyReceipt {
+  programCode: string; amount: number; rail: string; bcrpReference: string;
+  status: string; disbursedAt: string;
+}
+export interface OfflineReceipt {
+  idempotencyKey: string; nonce: number; receivedVia: string;
+  status: string; receivedAt: string; settledAt: string | null;
+}
+export interface AgroCenterData {
+  success: boolean;
+  identity: AgroIdentity;
+  parcels: AgroParcel[];
+  riskAlerts: RiskAlert[];
+  droneScans: DroneScan[];
+  subsidies: SubsidyReceipt[];
+  offlineTxs: OfflineReceipt[];
 }
 export interface EudrPassport {
   certUuid: string; vcHash: string; integrity: 'valid' | 'tampered' | 'unknown';

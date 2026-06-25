@@ -9,7 +9,7 @@
 // ============================================================================
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
-import { api, type AgroAlert, type EudrPassport, type TelemetrySeries, type OracleReading } from '../lib/api';
+import { api, type AgroAlert, type EudrPassport, type TelemetrySeries, type OracleReading, type AgroCenterData } from '../lib/api';
 import Sparkline from '../components/Sparkline';
 
 // ── Tipos del perfil agro ───────────────────────────────────────────────────
@@ -57,6 +57,7 @@ export default function AgroCenter() {
   const [alerts, setAlerts] = useState<AgroAlert[]>([]);
   const [series, setSeries] = useState<TelemetrySeries | null>(null);
   const [oracle, setOracle] = useState<OracleReading | null>(null);
+  const [center, setCenter] = useState<AgroCenterData | null>(null);
   const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,8 +65,12 @@ export default function AgroCenter() {
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const p = await api.agroProfile();
+      const [p, c] = await Promise.all([
+        api.agroProfile(),
+        api.agroCenter().catch(() => null),
+      ]);
       setProfile(p);
+      setCenter(c);
       const campaign: Campaign | null = p.campaigns?.[0] ?? null;
       setActiveCampaign(campaign);
       if (campaign) {
@@ -261,6 +266,200 @@ export default function AgroCenter() {
       {/* ── Bloque 5: Pasaporte de trazabilidad EUDR ──────────────────────── */}
       <SectionTitle icon="📜" title="Trazabilidad y certificación EUDR" subtitle="Pasaporte digital del lote · deforestación cero" />
       <EudrPanel campaign={activeCampaign} profile={profile} />
+
+      {/* ── Bloque 6: Identidad soberana PPA (Solución 7) ─────────────────── */}
+      <SectionTitle icon="🪪" title="Identidad agraria soberana (PPA)" subtitle="Padrón de Productores Agrarios · ancla KYC" />
+      <IdentityPanel center={center} />
+
+      {/* ── Bloque 7: Parcelas georreferenciadas (Solución 7) ─────────────── */}
+      <SectionTitle icon="🗺️" title="Parcelas georreferenciadas" subtitle="Catastro del padrón · tenencia y superficie" />
+      <ParcelsPanel center={center} />
+
+      {/* ── Bloque 8: Riesgo por agricultura de precisión (Solución 9) ─────── */}
+      <SectionTitle icon="🛩️" title="Agricultura de precisión (drones)" subtitle="Visión computacional · NDVI / sanidad / estrés" />
+      <DronePanel center={center} />
+
+      {/* ── Bloque 9: Subsidios gubernamentales TAPP (Solución 6) ──────────── */}
+      <SectionTitle icon="🏛️" title="Subsidios TAPP (BCRP)" subtitle="Fertiabono · riel interoperable · liquidado en soles" />
+      <SubsidyPanel center={center} />
+
+      {/* ── Bloque 10: Billetera offline USSD/Mesh (Solución 8) ────────────── */}
+      <SectionTitle icon="📵" title="Sincronización offline (USSD/Mesh)" subtitle="Transacciones firmadas sin internet · anti doble-gasto" />
+      <OfflinePanel center={center} />
+    </div>
+  );
+}
+
+// ── Panel: identidad soberana PPA (Solución 7) ──────────────────────────────
+function IdentityPanel({ center }: { center: AgroCenterData | null }) {
+  const id = center?.identity;
+  if (!id) return <div className="card mb-lg"><p className="text-muted text-sm m-0">Identidad no disponible.</p></div>;
+  return (
+    <div className="card mb-lg">
+      <div className={`agro-integrity ${id.ppaVerified ? 'integrity-ok' : 'integrity-bad'} mb-md`}>
+        {id.ppaVerified ? '🪪 Identidad PPA VERIFICADA — microcrédito habilitado' : '⛔ Sin identidad PPA — crédito bloqueado'}
+      </div>
+      <div className="agro-passport-grid">
+        <MiniStat label="ID AgroDigital" tag="DID*" value={id.agroDigitalId ?? '—'} />
+        <MiniStat label="Código PPA" tag="ppa" value={id.ppaCode ?? '—'} />
+        <MiniStat label="Parcelas legales" tag="n" value={String(id.legalParcelCount)} />
+        <MiniStat label="Superficie verificada" tag="ha" value={`${fmt(id.verifiedHectares)} ha`} />
+      </div>
+      {id.identityHash && (
+        <div className="agro-hash-row mt-md">
+          <span className="agro-hash-label">Hash de identidad (precursor SSI/VC)</span>
+          <code className="agro-hash">{id.identityHash.slice(0, 12)}…{id.identityHash.slice(-4)}</code>
+        </div>
+      )}
+      <p className="text-muted text-sm mt-sm m-0">
+        El <code>agroDigitalId</code> y el hash de identidad son la base de una
+        Credencial Verificable (VC/SSI) que se anclará a LNET en la Fase 3.
+      </p>
+    </div>
+  );
+}
+
+// ── Panel: parcelas georreferenciadas (Solución 7) ──────────────────────────
+function ParcelsPanel({ center }: { center: AgroCenterData | null }) {
+  const parcels = center?.parcels ?? [];
+  if (parcels.length === 0) {
+    return <div className="card mb-lg"><p className="text-muted text-sm m-0">Sin parcelas ingestadas. Ejecuta la ingesta PPA para georreferenciar.</p></div>;
+  }
+  // Bounding box simple para encuadrar los marcadores en un mini-mapa esquemático.
+  const lats = parcels.map(p => p.gpsLat), lngs = parcels.map(p => p.gpsLng);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  const pos = (lat: number, lng: number) => ({
+    top: `${90 - ((lat - minLat) / ((maxLat - minLat) || 1)) * 80}%`,
+    left: `${10 + ((lng - minLng) / ((maxLng - minLng) || 1)) * 80}%`,
+  });
+  return (
+    <div className="card mb-lg">
+      <div className="agro-map" role="img" aria-label="Mapa esquemático de parcelas">
+        {parcels.map((p, i) => (
+          <div key={p.parcelCode} className="agro-map-pin" style={pos(p.gpsLat, p.gpsLng)} title={p.parcelCode}>📍<span>{i + 1}</span></div>
+        ))}
+        <span className="agro-map-note">GPS {fmt(minLat, 2)}…{fmt(maxLat, 2)}</span>
+      </div>
+      <div className="agro-parcel-list mt-md">
+        {parcels.map((p, i) => (
+          <div key={p.parcelCode} className="agro-parcel-row">
+            <span className="agro-parcel-idx">{i + 1}</span>
+            <div className="agro-parcel-body">
+              <div className="agro-parcel-code">{p.parcelCode} <span className="agro-tag">{p.landTenure}</span></div>
+              <div className="agro-parcel-meta">{fmt(p.hectares)} ha · {p.gpsLat.toFixed(4)}, {p.gpsLng.toFixed(4)}{p.district ? ` · ${p.district}` : ''}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Panel: agricultura de precisión / drones (Solución 9) ───────────────────
+function DronePanel({ center }: { center: AgroCenterData | null }) {
+  const scans = center?.droneScans ?? [];
+  const risks = (center?.riskAlerts ?? []).filter(r => r.source === 'Drone');
+  return (
+    <div className="card mb-lg">
+      {scans.length === 0 ? (
+        <p className="text-muted text-sm m-0">Sin vuelos de dron registrados para la campaña.</p>
+      ) : (
+        <>
+          {scans.slice(0, 1).map(d => (
+            <div key={d.flightId}>
+              <div className="agro-oracle-grid">
+                <MiniStat label="NDVI (vigor)" tag="idx" value={d.ndvi != null ? fmt(d.ndvi, 2) : '—'} />
+                <MiniStat label="Temp. dosel" tag="T_canopy" value={d.canopyTempC != null ? `${fmt(d.canopyTempC)} °C` : '—'} />
+                <MiniStat label="Madurez fruto" tag="%" value={d.fruitMaturityPct != null ? `${fmt(d.fruitMaturityPct, 0)} %` : '—'} />
+                <MiniStat label="Área afectada" tag="%" value={d.affectedAreaPct != null ? `${fmt(d.affectedAreaPct, 0)} %` : '—'} />
+              </div>
+              <div className="text-muted text-sm mt-sm">Vuelo {d.flightId} · {d.provider} · {new Date(d.capturedAt).toLocaleDateString('es-PE')}</div>
+            </div>
+          ))}
+        </>
+      )}
+      {risks.length > 0 && (
+        <div className="agro-alert-list mt-md">
+          {risks.map(r => {
+            const sev = SEVERITY[r.severity] ?? SEVERITY.Info;
+            return (
+              <div key={r.id} className="agro-alert-item">
+                <div className="agro-alert-icon">{r.category === 'Disease' ? '🦠' : '🌡️'}</div>
+                <div className="agro-alert-body">
+                  <div className="agro-alert-head">
+                    <span className="agro-alert-title">{r.category === 'Disease' ? 'Enfermedad' : 'Estrés térmico'}</span>
+                    <span className={`agro-sev-badge ${sev.cls}`}>{sev.label}</span>
+                  </div>
+                  <div className="agro-alert-msg">{r.message}</div>
+                  <div className="agro-alert-meta">Impacto en score: <b>{r.riskDelta} pts</b> (temporal, hasta resolver)</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Panel: subsidios gubernamentales vía TAPP (Solución 6) ──────────────────
+function SubsidyPanel({ center }: { center: AgroCenterData | null }) {
+  const subs = center?.subsidies ?? [];
+  const total = subs.reduce((a, s) => a + s.amount, 0);
+  if (subs.length === 0) {
+    return <div className="card mb-lg"><p className="text-muted text-sm m-0">Sin desembolsos de subsidios recibidos por TAPP.</p></div>;
+  }
+  return (
+    <div className="card mb-lg">
+      <div className="stat-box mb-md">
+        <div className="stat-label">Total recibido vía TAPP</div>
+        <div className="stat-value">S/ {fmt(total, 2)}</div>
+      </div>
+      <div className="agro-parcel-list">
+        {subs.map(s => (
+          <div key={s.bcrpReference} className="agro-parcel-row">
+            <span className="agro-parcel-idx">🏛️</span>
+            <div className="agro-parcel-body">
+              <div className="agro-parcel-code">{s.programCode} · S/ {fmt(s.amount, 2)} <span className="agro-tag">{s.rail}</span></div>
+              <div className="agro-parcel-meta">Ref. BCRP {s.bcrpReference} · {new Date(s.disbursedAt).toLocaleDateString('es-PE')}</div>
+            </div>
+            <span className="agro-sev-badge agro-sev-info">{s.status === 'Settled' ? 'LIQUIDADO' : s.status}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Panel: sincronización offline USSD/Mesh (Solución 8) ────────────────────
+function OfflinePanel({ center }: { center: AgroCenterData | null }) {
+  const txs = center?.offlineTxs ?? [];
+  if (txs.length === 0) {
+    return <div className="card mb-lg"><p className="text-muted text-sm m-0">Sin transacciones offline sincronizadas.</p></div>;
+  }
+  const STATUS: Record<string, string> = {
+    Settled: 'agro-sev-info', Pending: 'agro-sev-warning',
+    Rejected_Expired: 'agro-sev-critical', Rejected_Signature: 'agro-sev-critical',
+  };
+  return (
+    <div className="card mb-lg">
+      <div className="agro-parcel-list">
+        {txs.map(t => (
+          <div key={t.idempotencyKey} className="agro-parcel-row">
+            <span className="agro-parcel-idx">{t.receivedVia === 'USSD' ? '📟' : t.receivedVia === 'MeshBLE' ? '📡' : '🔄'}</span>
+            <div className="agro-parcel-body">
+              <div className="agro-parcel-code">nonce #{t.nonce} <span className="agro-tag">{t.receivedVia}</span></div>
+              <div className="agro-parcel-meta">{t.idempotencyKey.slice(0, 18)}… · {new Date(t.receivedAt).toLocaleDateString('es-PE')}</div>
+            </div>
+            <span className={`agro-sev-badge ${STATUS[t.status] ?? 'agro-sev-info'}`}>{t.status.replace('Rejected_', '✕ ')}</span>
+          </div>
+        ))}
+      </div>
+      <p className="text-muted text-sm mt-sm m-0">
+        Cada transacción se valida por <code>idempotencyKey</code> + <code>nonce</code>
+        monótono + firma, evitando el doble gasto al recuperar señal.
+      </p>
     </div>
   );
 }
