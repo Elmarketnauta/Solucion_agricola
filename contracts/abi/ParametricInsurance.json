@@ -1,0 +1,102 @@
+{
+  "_comment": "ABI de ParametricInsurance.sol (Yunta-Agro, Fase 3 / PoC). Derivado del contrato fuente en ../ParametricInsurance.sol. Listo para usar con ethers una vez desplegado el contrato; solo falta la dirección (PARAMETRIC_INSURANCE_ADDRESS en .env). No representa un contrato desplegado todavía.",
+  "contractName": "ParametricInsurance",
+  "abi": [
+    {
+      "type": "constructor",
+      "inputs": [{ "name": "_oracle", "type": "address", "internalType": "address" }],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "event",
+      "name": "PolicyCreated",
+      "anonymous": false,
+      "inputs": [
+        { "name": "policyId", "type": "bytes32", "indexed": true, "internalType": "bytes32" },
+        { "name": "producerId", "type": "bytes32", "indexed": true, "internalType": "bytes32" },
+        { "name": "coverageAmount", "type": "uint256", "indexed": false, "internalType": "uint256" }
+      ]
+    },
+    {
+      "type": "event",
+      "name": "PayoutTriggered",
+      "anonymous": false,
+      "inputs": [
+        { "name": "policyId", "type": "bytes32", "indexed": true, "internalType": "bytes32" },
+        { "name": "producerId", "type": "bytes32", "indexed": true, "internalType": "bytes32" },
+        { "name": "amount", "type": "uint256", "indexed": false, "internalType": "uint256" },
+        { "name": "eventType", "type": "uint8", "indexed": false, "internalType": "enum ParametricInsurance.EventType" }
+      ]
+    },
+    {
+      "type": "event",
+      "name": "PolicyExpired",
+      "anonymous": false,
+      "inputs": [
+        { "name": "policyId", "type": "bytes32", "indexed": true, "internalType": "bytes32" }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "insurer",
+      "inputs": [],
+      "outputs": [{ "name": "", "type": "address", "internalType": "address" }],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "oracle",
+      "inputs": [],
+      "outputs": [{ "name": "", "type": "address", "internalType": "address" }],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "setOracle",
+      "inputs": [{ "name": "_oracle", "type": "address", "internalType": "address" }],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "createPolicy",
+      "inputs": [
+        { "name": "policyId", "type": "bytes32", "internalType": "bytes32" },
+        { "name": "producerId", "type": "bytes32", "internalType": "bytes32" },
+        { "name": "gpsLat", "type": "int256", "internalType": "int256" },
+        { "name": "gpsLng", "type": "int256", "internalType": "int256" },
+        { "name": "rainThresholdMm", "type": "uint256", "internalType": "uint256" },
+        { "name": "coverageAmount", "type": "uint256", "internalType": "uint256" },
+        { "name": "periodStart", "type": "uint256", "internalType": "uint256" },
+        { "name": "periodEnd", "type": "uint256", "internalType": "uint256" }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "reportWeather",
+      "inputs": [
+        { "name": "policyId", "type": "bytes32", "internalType": "bytes32" },
+        { "name": "accumulatedRainMm", "type": "uint256", "internalType": "uint256" },
+        { "name": "declaredEvent", "type": "uint8", "internalType": "enum ParametricInsurance.EventType" }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "confirmPaidOut",
+      "inputs": [{ "name": "policyId", "type": "bytes32", "internalType": "bytes32" }],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "expirePolicy",
+      "inputs": [{ "name": "policyId", "type": "bytes32", "internalType": "bytes32" }],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    }
+  ]
+}
