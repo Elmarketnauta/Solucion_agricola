@@ -897,7 +897,9 @@ app.use((_req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, async () => {
+// 0.0.0.0 → enlaza a todas las interfaces (requerido por Render/contenedores
+// para detectar el puerto abierto). En local sigue accesible vía localhost.
+app.listen(Number(PORT), '0.0.0.0', async () => {
   console.log(`✅ Yunta Backend Server running on http://localhost:${PORT}`);
 
   // Hidrata la blocklist de JWT revocados desde la BD (P0-3): la revocación
