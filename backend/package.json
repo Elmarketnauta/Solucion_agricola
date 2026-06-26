@@ -4,6 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "ts-node src/server.ts",
+    "build": "prisma generate",
+    "deploy:migrate": "prisma migrate deploy",
+    "deploy:seed": "ts-node prisma/seed.ts && ts-node prisma/seed.agro.ts",
+    "release": "npm run deploy:migrate && npm run deploy:seed",
     "test": "cross-env DATABASE_URL=postgresql://yunta:yunta_dev_password@localhost:5433/yunta_test?schema=public NODE_ENV=test vitest run",
     "test:watch": "cross-env DATABASE_URL=postgresql://yunta:yunta_dev_password@localhost:5433/yunta_test?schema=public NODE_ENV=test vitest",
     "test:coverage": "cross-env DATABASE_URL=postgresql://yunta:yunta_dev_password@localhost:5433/yunta_test?schema=public NODE_ENV=test vitest run --coverage"

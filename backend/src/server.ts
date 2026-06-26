@@ -92,10 +92,14 @@ const transferSchema = z.object({
 });
 
 const SESSION_COOKIE = 'yunta_session';
+const IS_PROD = process.env.NODE_ENV === 'production';
 const cookieOpts = {
   httpOnly: true,
-  sameSite: 'strict' as const,
-  secure: process.env.NODE_ENV === 'production', // HTTPS only in prod
+  // En producción el front y el API viven en dominios distintos (cross-site):
+  // la cookie debe ser 'none'+secure para que el navegador la envíe. En local
+  // (mismo host) se mantiene 'strict' por máxima protección CSRF.
+  sameSite: (IS_PROD ? 'none' : 'strict') as 'none' | 'strict',
+  secure: IS_PROD, // HTTPS only in prod (requerido por SameSite=None)
   maxAge: 7 * 24 * 60 * 60 * 1000,
   path: '/',
 };
