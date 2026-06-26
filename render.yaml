@@ -23,9 +23,10 @@ services:
     runtime: node
     plan: free
     rootDir: backend
-    buildCommand: npm install && npm run build
-    # Migraciones + seed idempotente ANTES de arrancar (no rompe en re-deploys).
-    preDeployCommand: npm run release
+    # El plan free NO permite preDeployCommand, así que migraciones + seed
+    # (idempotentes) corren dentro del build. 'prisma generate' va incluido en
+    # 'release' vía build → ver scripts en backend/package.json.
+    buildCommand: npm install && npm run build && npm run release
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
